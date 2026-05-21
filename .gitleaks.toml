@@ -18,6 +18,9 @@ paths = [
 regexes = [
   '''changeme-[a-z0-9-]+''',
   '''dev-[a-z-]+-total-campanha[a-z0-9-]*''',
+  # IDs públicos de role definitions do Azure (constantes, não são segredos).
+  '''7f951dda-4ed3-4680-a7ca-43fe172d538d''',
+  '''4633458b-17de-408a-b874-0445c86b69e6''',
 ]
 
 # Regras extras para padrões Azure (além das default do gitleaks).

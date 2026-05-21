@@ -545,8 +545,10 @@ resource appWorker 'Microsoft.App/containerApps@2024-03-01' = {
 // ---------------------------------------------------------------------------
 // RBAC — identidade de cada Container App lê ACR (pull) e Key Vault (secrets)
 // ---------------------------------------------------------------------------
-var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d'
-var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6'
+// IDs públicos de role definitions built-in do Azure (constantes documentadas
+// pela Microsoft — NÃO são segredos).
+var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
+var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
 
 var apps = [
   { nome: 'api', principalId: appApi.identity.principalId }
