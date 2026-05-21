@@ -34,10 +34,6 @@ export class AnalyticsService {
       const porStatus: Record<string, number> = {};
       for (const m of mensagens30d) porStatus[m.status] = m._count._all;
 
-      const optIn = await tx.contato.aggregate({
-        where: { excluidoEm: null },
-        _count: { _all: true },
-      });
       const optInEmail = await tx.contato.count({
         where: { excluidoEm: null, optInEmail: true },
       });
@@ -49,7 +45,7 @@ export class AnalyticsService {
         periodo: { desde, ate: new Date() },
         campanhas,
         contatos: {
-          total: optIn._count._all,
+          total: contatos,
           optInEmail,
           optInWhatsapp,
         },
