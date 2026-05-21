@@ -17,6 +17,17 @@ bad=0
 staged=$(git diff --cached --name-only --diff-filter=ACM)
 [ -z "$staged" ] && exit 0
 
+# --- 0. gitleaks (se instalado) — varredura robusta de segredos ---
+# Instale com: scoop install gitleaks (ver 00_prompt-seguranca-senhas.md §8).
+# Sem gitleaks, as checagens regex abaixo cobrem o básico.
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks protect --staged --redact --no-banner >/dev/null 2>&1; then
+    echo "X pre-commit: gitleaks detectou segredo no conteudo staged:" >&2
+    gitleaks protect --staged --redact --no-banner >&2 2>&1 || true
+    bad=1
+  fi
+fi
+
 for f in $staged; do
   # --- 1. Arquivos de ambiente / segredo ---
   case "$f" in

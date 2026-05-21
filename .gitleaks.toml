@@ -1,0 +1,34 @@
+# gitleaks — varredura de segredos (ver 00_prompt-seguranca-senhas.md seção 8).
+# Usado pelo hook pre-commit (se gitleaks estiver instalado) e pelo workflow
+# anti-regression.yml.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Allowlist TotalUtiliti"
+paths = [
+  '''\.env\.example$''',
+  '''\.gitleaks\.toml$''',
+  '''\.githooks/.*''',          # os hooks contêm regex de exemplo, não segredos
+  '''docs/.*''',
+  '''instrucoes/.*''',
+]
+# Valores placeholder do .env.example não são segredos reais.
+regexes = [
+  '''changeme-[a-z0-9-]+''',
+  '''dev-[a-z-]+-total-campanha[a-z0-9-]*''',
+]
+
+# Regras extras para padrões Azure (além das default do gitleaks).
+[[rules]]
+id = "azure-connection-string"
+description = "Azure Connection String"
+regex = '''(?i)(DefaultEndpointsProtocol|AccountKey|SharedAccessSignature)\s*=\s*[^\s;"']+'''
+tags = ["azure", "connection-string"]
+
+[[rules]]
+id = "azure-openai-key"
+description = "Azure OpenAI API Key"
+regex = '''(?i)(api[_-]?key|openai[_-]?key)\s*[:=]\s*["']?[a-f0-9]{32}["']?'''
+tags = ["azure", "openai"]
