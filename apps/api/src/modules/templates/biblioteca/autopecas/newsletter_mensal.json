@@ -1,0 +1,13 @@
+{
+  "canal": "EMAIL",
+  "nome": "Newsletter mensal — Autopeças",
+  "descricao": "Newsletter com novidades de estoque e dicas técnicas. Layout sóbrio para B2B.",
+  "assunto": "Novidades de estoque em {{mes}}",
+  "mjml": "<mjml><mj-body width=\"600px\"><mj-section background-color=\"#0f172a\"><mj-column><mj-text color=\"#fff\" font-size=\"20px\" font-weight=\"600\">{{razaoSocial}}</mj-text></mj-column></mj-section><mj-section><mj-column><mj-text font-size=\"16px\">Olá {{nome}},</mj-text><mj-text>As novidades de {{mes}} já estão disponíveis para frotistas e oficinas parceiras.</mj-text><mj-button background-color=\"#0f172a\" href=\"{{linkCatalogo}}\">Ver catálogo</mj-button></mj-column></mj-section></mj-body></mjml>",
+  "variaveis": [
+    { "key": "nome", "exemplo": "João" },
+    { "key": "razaoSocial", "exemplo": "Cardans Tencar" },
+    { "key": "mes", "exemplo": "maio" },
+    { "key": "linkCatalogo", "exemplo": "https://cardanstencar.com.br/catalogo" }
+  ]
+}

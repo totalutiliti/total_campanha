@@ -1,0 +1,11 @@
+{
+  "canal": "WHATSAPP",
+  "nome": "Promoção Barras de Direção",
+  "descricao": "Oferta de barra de direção para frotistas. Funciona bem para marketing pré-revisão.",
+  "textoExemplo": "Olá {{nome}}, temos {{produto}} disponível por {{preco}}. Resposta a esta mensagem para reservar.",
+  "variaveis": [
+    { "key": "nome", "exemplo": "João" },
+    { "key": "produto", "exemplo": "Barra de Direção Curta MB 1418" },
+    { "key": "preco", "exemplo": "R$ 487,00" }
+  ]
+}

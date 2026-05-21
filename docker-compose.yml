@@ -1,0 +1,54 @@
+# Total Campanha — stack local de desenvolvimento.
+# Subir: pnpm db:up  (alias para `docker compose up -d postgres redis mailhog`)
+# Derrubar: pnpm db:down
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tc-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: total_campanha_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      # Habilita extensões padrão; pgcrypto e uuid-ossp são criadas pelas migrations.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --locale=C.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d total_campanha_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: tc-redis
+    restart: unless-stopped
+    # noeviction: filas BullMQ NUNCA podem perder jobs por evicção (ver instrucoes/instrucao_azure.md).
+    command: ["redis-server", "--maxmemory-policy", "noeviction", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: tc-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # UI: http://localhost:8025
+
+volumes:
+  postgres_data:
+    name: tc_postgres_data
+  redis_data:
+    name: tc_redis_data

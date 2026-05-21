@@ -1,0 +1,342 @@
+// Total Campanha — schema Prisma.
+// Espelha docs/SPECS.md seção 1. Nomes de tabela em snake_case (@@map) para
+// casar com a lista em packages/db/src/rls-tables.ts e com as policies SQL.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  // native = ambiente de quem rodar `prisma generate`.
+  // linux-musl-openssl-3.0.x = containers node:20-alpine (dev e Dockerfiles PROD).
+  binaryTargets   = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  // URL usada apenas pelos comandos `prisma migrate ...` (role com BYPASSRLS).
+  directUrl  = env("DATABASE_MIGRATION_URL")
+  extensions = [pgcrypto, uuidOssp(map: "uuid-ossp")]
+}
+
+// ============================================================================
+// GLOBAL (sem tenant_id, sem RLS)
+// ============================================================================
+
+model Tenant {
+  id          String       @id @default(uuid()) @db.Uuid
+  slug        String       @unique
+  cnpj        String       @unique
+  razaoSocial String       @map("razao_social")
+  plano       Plano        @default(STARTER)
+  status      TenantStatus @default(TRIAL)
+  trialAteEm  DateTime?    @map("trial_ate_em")
+  // Billing (Fase 6.2) — id da subscription no Asaas.
+  asaasSubscriptionId String? @map("asaas_subscription_id")
+  // Lembretes de fim de trial já enviados (ex.: ["7d","3d","1d"]).
+  trialLembretes      String[] @default([]) @map("trial_lembretes")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  userTenants UserTenant[]
+
+  @@map("tenants")
+}
+
+enum Plano {
+  STARTER
+  PRO
+  ENTERPRISE
+}
+
+enum TenantStatus {
+  TRIAL
+  ATIVO
+  INADIMPLENTE
+  SUSPENSO
+  CANCELADO
+}
+
+model User {
+  id            String       @id @default(uuid()) @db.Uuid
+  emailHash     String       @unique @map("email_hash")
+  email         String       @unique
+  passwordHash  String       @map("password_hash")
+  totpSecret    String?      @map("totp_secret")
+  isSuperAdmin  Boolean      @default(false) @map("is_super_admin")
+  createdAt     DateTime     @default(now()) @map("created_at")
+
+  userTenants   UserTenant[]
+
+  @@map("users")
+}
+
+model UserTenant {
+  userId   String @map("user_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  role     Role
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@id([userId, tenantId])
+  @@index([tenantId])
+  @@map("user_tenants")
+}
+
+enum Role {
+  ADMIN
+  EDITOR_CAMPANHA
+  VISUALIZADOR
+}
+
+model UsageLog {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  servico          String
+  custoEstimadoBrl Decimal  @map("custo_estimado_brl") @db.Decimal(10, 4)
+  metadados        Json
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([servico, createdAt])
+  @@map("usage_logs")
+}
+
+// ============================================================================
+// POR TENANT (RLS habilitado via migration 0002_enable_rls.sql)
+// ============================================================================
+
+model Contato {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  nome          String?
+  email         String?
+  telefoneE164  String?   @map("telefone_e164")
+  tags          String[]
+  extras        Json      @default("{}")
+  optInEmail    Boolean   @default(false) @map("opt_in_email")
+  optInWhatsapp Boolean   @default(false) @map("opt_in_whatsapp")
+  optInMeta     Json?     @map("opt_in_meta")
+  excluidoEm    DateTime? @map("excluido_em")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([tenantId])
+  @@index([tenantId, email])
+  @@index([tenantId, telefoneE164])
+  @@unique([tenantId, email])
+  @@unique([tenantId, telefoneE164])
+  @@map("contatos")
+}
+
+model Segmento {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  nome      String
+  filtros   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@map("segmentos")
+}
+
+model Template {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @map("tenant_id") @db.Uuid
+  canal            Canal
+  nome             String
+  // Email
+  mjml             String?
+  assunto          String?
+  // WhatsApp (referência ao template aprovado na Meta do tenant)
+  metaTemplateName String?  @map("meta_template_name")
+  metaLanguage     String?  @map("meta_language")
+  variaveis        Json
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, canal])
+  @@map("templates")
+}
+
+enum Canal {
+  EMAIL
+  WHATSAPP
+}
+
+model Campanha {
+  id                 String          @id @default(uuid()) @db.Uuid
+  tenantId           String          @map("tenant_id") @db.Uuid
+  nome               String
+  segmentoId         String          @map("segmento_id") @db.Uuid
+  templateId         String          @map("template_id") @db.Uuid
+  canal              Canal
+  status             StatusCampanha  @default(RASCUNHO)
+  agendadoPara       DateTime?       @map("agendado_para")
+  janelaEnvio        Json?           @map("janela_envio")
+  totalDestinatarios Int             @default(0) @map("total_destinatarios")
+  totalEnviados      Int             @default(0) @map("total_enviados")
+  totalEntregues     Int             @default(0) @map("total_entregues")
+  totalLidos         Int             @default(0) @map("total_lidos")
+  totalRespondidos   Int             @default(0) @map("total_respondidos")
+  totalFalhas        Int             @default(0) @map("total_falhas")
+  custoEstimadoBrl   Decimal?        @map("custo_estimado_brl") @db.Decimal(10, 4)
+  custoRealBrl       Decimal?        @map("custo_real_brl") @db.Decimal(10, 4)
+  iniciadaEm         DateTime?       @map("iniciada_em")
+  finalizadaEm       DateTime?       @map("finalizada_em")
+  createdAt          DateTime        @default(now()) @map("created_at")
+
+  @@index([tenantId, status])
+  @@map("campanhas")
+}
+
+enum StatusCampanha {
+  RASCUNHO
+  AGENDADA
+  DISPARANDO
+  PAUSADA
+  FINALIZADA
+  CANCELADA
+}
+
+model Mensagem {
+  id                String         @id @default(uuid()) @db.Uuid
+  tenantId          String         @map("tenant_id") @db.Uuid
+  campanhaId        String         @map("campanha_id") @db.Uuid
+  contatoId         String?        @map("contato_id") @db.Uuid
+  // Hash de destinatário usado após LGPD-delete (RULES 5.3).
+  destinatarioHash  String?        @map("destinatario_hash")
+  canal             Canal
+  status            StatusMensagem @default(PENDENTE)
+  statusHistory     Json           @default("[]") @map("status_history")
+  providerMessageId String?        @map("provider_message_id")
+  custoEstimadoBrl  Decimal?       @map("custo_estimado_brl") @db.Decimal(10, 4)
+  enviadaEm         DateTime?      @map("enviada_em")
+  entregueEm        DateTime?      @map("entregue_em")
+  lidaEm            DateTime?      @map("lida_em")
+  falhaMotivo       String?        @map("falha_motivo")
+
+  @@index([tenantId, campanhaId])
+  @@index([tenantId, status])
+  @@index([providerMessageId])
+  @@map("mensagens")
+}
+
+enum StatusMensagem {
+  PENDENTE
+  ENFILEIRADA
+  ENVIADA
+  ENTREGUE
+  LIDA
+  RESPONDIDA
+  FALHOU
+  CANCELADA
+}
+
+model ConexaoWhatsapp {
+  id             String        @id @default(uuid()) @db.Uuid
+  tenantId       String        @map("tenant_id") @db.Uuid
+  wabaId         String        @map("waba_id")
+  phoneNumberId  String        @map("phone_number_id")
+  // Criptografado via pgcrypto.pgp_sym_encrypt (RULES 4.1).
+  tokenEncrypted Bytes         @map("token_encrypted")
+  webhookSecret  String        @map("webhook_secret")
+  tierMeta       TierMeta      @default(TIER_250) @map("tier_meta")
+  qualityRating  String?       @map("quality_rating")
+  status         StatusConexao @default(PENDENTE_VERIFICACAO)
+  ultimoTeste    DateTime?     @map("ultimo_teste")
+  createdAt      DateTime      @default(now()) @map("created_at")
+
+  @@unique([tenantId])
+  @@map("conexoes_whatsapp")
+}
+
+enum TierMeta {
+  TIER_250
+  TIER_1K
+  TIER_10K
+  TIER_100K
+  TIER_UNLIMITED
+}
+
+enum StatusConexao {
+  PENDENTE_VERIFICACAO
+  ATIVA
+  SUSPENSA
+  ERRO
+}
+
+model ConexaoEmail {
+  id         String        @id @default(uuid()) @db.Uuid
+  tenantId   String        @map("tenant_id") @db.Uuid
+  dominio    String
+  remetente  String
+  dkimStatus String        @map("dkim_status")
+  spfStatus  String        @map("spf_status")
+  status     StatusConexao @default(PENDENTE_VERIFICACAO)
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  @@unique([tenantId, dominio])
+  @@map("conexoes_email")
+}
+
+model OptInLog {
+  id           BigInt    @id @default(autoincrement())
+  tenantId     String    @map("tenant_id") @db.Uuid
+  contatoId    String?   @map("contato_id") @db.Uuid
+  email        String?
+  telefoneE164 String?   @map("telefone_e164")
+  canal        Canal
+  acao         OptInAcao
+  ip           String
+  userAgent    String    @map("user_agent")
+  origem       String
+  versaoTermo  String    @map("versao_termo")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([contatoId])
+  @@map("opt_in_logs")
+}
+
+enum OptInAcao {
+  OPT_IN
+  OPT_OUT
+}
+
+model AuditLog {
+  id        BigInt   @id @default(autoincrement())
+  tenantId  String?  @map("tenant_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  acao      String
+  recurso   String?
+  dados     Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([userId, createdAt])
+  @@map("audit_logs")
+}
+
+model InboxConversa {
+  id                String   @id @default(uuid()) @db.Uuid
+  tenantId          String   @map("tenant_id") @db.Uuid
+  contatoId         String   @map("contato_id") @db.Uuid
+  ultimoMsgAt       DateTime @map("ultimo_msg_at")
+  janela24hExpiraEm DateTime @map("janela_24h_expira_em")
+  status            String
+
+  @@index([tenantId, status])
+  @@map("inbox_conversas")
+}
+
+model InboxMensagem {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  conversaId String   @map("conversa_id") @db.Uuid
+  direcao    String
+  conteudo   String
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, conversaId])
+  @@map("inbox_mensagens")
+}

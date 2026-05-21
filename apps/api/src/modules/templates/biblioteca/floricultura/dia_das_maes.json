@@ -1,0 +1,11 @@
+{
+  "canal": "WHATSAPP",
+  "nome": "Dia das Mães — Floricultura",
+  "descricao": "Lembrete personalizado de Dia das Mães com link para o catálogo.",
+  "textoExemplo": "Olá {{nome}}! O Dia das Mães está próximo. Reserve seu arranjo até {{prazoReserva}} e receba no domingo. Confira: {{linkCatalogo}}",
+  "variaveis": [
+    { "key": "nome", "exemplo": "Maria" },
+    { "key": "prazoReserva", "exemplo": "10/05" },
+    { "key": "linkCatalogo", "exemplo": "https://florsuave.com.br/maes" }
+  ]
+}

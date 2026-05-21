@@ -1,0 +1,10 @@
+{
+  "extends": "@total-campanha/tsconfig/library.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "composite": true,
+    "types": ["node", "jest"]
+  },
+  "include": ["src/**/*"]
+}

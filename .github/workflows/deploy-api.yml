@@ -1,0 +1,100 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/api/**', 'packages/**', '.github/workflows/deploy-api.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-api
+  cancel-in-progress: false
+
+env:
+  RG: rg-totalcampanha-prod
+  APP: tc-api-prod
+  ACR: acrtotalcampanha01
+  IMAGE: tc-api
+  API_URL: https://api.totalcampanha.com.br
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint, typecheck, test
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm test:tenant-isolation
+
+      - name: Login Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login ACR
+        run: az acr login --name $ACR
+
+      - name: Build & push
+        run: |
+          IMAGE_TAG=prod-${GITHUB_SHA::7}
+          docker build -f apps/api/Dockerfile \
+            -t $ACR.azurecr.io/$IMAGE:$IMAGE_TAG .
+          docker push $ACR.azurecr.io/$IMAGE:$IMAGE_TAG
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Deploy Container App
+        run: |
+          az containerapp update -g $RG -n $APP \
+            --image $ACR.azurecr.io/$IMAGE:$IMAGE_TAG
+
+      - name: Wait health check
+        run: |
+          for i in {1..30}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" $API_URL/api/v1/health/ready || true)
+            if [ "$STATUS" = "200" ]; then echo "health OK"; exit 0; fi
+            echo "tentativa $i: $STATUS — aguardando..."
+            sleep 10
+          done
+          echo "health check falhou"
+          exit 1
+
+      - name: Smoke test
+        run: bash scripts/smoke-test-prod.sh
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          PREV=$(az containerapp revision list -g $RG -n $APP \
+            --query "[?properties.active] | sort_by(@, &properties.createdTime) | [-2].name" -o tsv)
+          if [ -n "$PREV" ]; then
+            echo "Rollback para $PREV"
+            az containerapp ingress traffic set -g $RG -n $APP --revision-weight "$PREV=100"
+          fi
+
+      - name: Notify Slack
+        if: always()
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'content-type: application/json' \
+              -d "{\"text\":\"Deploy tc-api: ${{ job.status }} (${GITHUB_SHA::7})\"}"
+          fi

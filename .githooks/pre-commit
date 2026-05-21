@@ -1,0 +1,61 @@
+#!/usr/bin/env sh
+# ============================================================================
+# pre-commit — Blindagem contra regressão (ver CLAUDE.md).
+#
+# Bloqueia:
+#  1. Arquivos de ambiente/segredo staged (.env, .env.prod, ...). .env.example OK.
+#  2. Segredos no conteúdo (AWS key AKIA..., private key, JWT eyJhbGciOi...).
+#  3. Comandos destrutivos (prisma db push / migrate reset / TRUNCATE TABLE /
+#     DROP TABLE) em arquivos de código SEM a marcação /* SAFE */ na mesma linha.
+#
+# Para burlar em emergência: `git commit --no-verify` — PROIBIDO salvo ordem
+# explícita do João (CLAUDE.md "Regras de comunicação").
+# ============================================================================
+set -u
+
+bad=0
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+for f in $staged; do
+  # --- 1. Arquivos de ambiente / segredo ---
+  case "$f" in
+    *.example) : ;;                       # .env.example e afins: permitidos
+    .env | .env.* | */.env | */.env.*)
+      echo "X pre-commit: arquivo de ambiente staged: $f" >&2
+      echo "  -> remova do commit; segredos vão para Key Vault, exemplo em .env.example" >&2
+      bad=1
+      continue
+      ;;
+  esac
+
+  blob=$(git show ":$f" 2>/dev/null) || continue
+
+  # --- 2. Segredos no conteúdo (qualquer arquivo de texto) ---
+  if printf '%s' "$blob" | grep -nE 'AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|eyJhbGciOi[A-Za-z0-9_-]{10}' >/dev/null 2>&1; then
+    echo "X pre-commit: possível segredo (AWS key / private key / JWT) em: $f" >&2
+    bad=1
+  fi
+
+  # --- 3. Comandos destrutivos — só em arquivos de código ---
+  case "$f" in
+    *.ts | *.tsx | *.js | *.jsx | *.mjs | *.cjs | *.sql | *.sh | *.prisma)
+      viol=$(printf '%s' "$blob" \
+        | grep -nE 'prisma db push|migrate reset|TRUNCATE TABLE|DROP TABLE' \
+        | grep -v 'SAFE' || true)
+      if [ -n "$viol" ]; then
+        echo "X pre-commit: comando destrutivo sem marcacao /* SAFE */ em $f:" >&2
+        printf '%s\n' "$viol" | sed 's/^/    /' >&2
+        bad=1
+      fi
+      ;;
+  esac
+done
+
+if [ "$bad" -ne 0 ]; then
+  echo "" >&2
+  echo "COMMIT BLOQUEADO. Corrija os itens acima." >&2
+  echo "Operacao destrutiva legitima? marque a linha com /* SAFE: motivo */." >&2
+  exit 1
+fi
+exit 0

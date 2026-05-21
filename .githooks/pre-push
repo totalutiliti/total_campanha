@@ -1,0 +1,78 @@
+#!/usr/bin/env sh
+# ============================================================================
+# pre-push — Blindagem contra regressão (ver CLAUDE.md).
+#
+# Bloqueia / verifica:
+#  A. Deleções de arquivos de código (apps/ packages/ infra/) vs origin/main
+#     -> pede confirmação humana explícita ("yes").
+#  B1. Push direto na branch main -> PROIBIDO (force PR feat/* -> dev -> main).
+#  B2. Push de tag prod-* -> roda os 2 gates de deploy:
+#      - o commit da tag tem de estar em origin/main;
+#      - a tag não pode apagar trabalho que já está em PROD (Gate 1).
+#
+# stdin recebe linhas: <localref> <localsha> <remoteref> <remotesha>
+# Burlar: `git push --no-verify` — PROIBIDO salvo ordem do João.
+# ============================================================================
+set -u
+
+fail() {
+  echo "X pre-push BLOQUEADO: $1" >&2
+  exit 1
+}
+
+# --- A. Deleções de código vs origin/main ---
+if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+  deleted=$(git diff --diff-filter=D --name-only origin/main...HEAD 2>/dev/null \
+    | grep -E '^(apps|packages|infra)/' || true)
+  if [ -n "$deleted" ]; then
+    echo "! Arquivos de codigo deletados nesta branch (vs origin/main):" >&2
+    printf '%s\n' "$deleted" | sed 's/^/    /' >&2
+    if [ -e /dev/tty ]; then
+      printf "Confirma o push com essas delecoes? digite 'yes': " >&2
+      read -r ans </dev/tty
+      [ "$ans" = "yes" ] || fail "delecoes de codigo nao confirmadas."
+    else
+      fail "delecoes de codigo detectadas e sem terminal para confirmar."
+    fi
+  fi
+fi
+
+# --- B. Por ref empurrada ---
+while read -r localref localsha remoteref remotesha; do
+  [ -z "${remoteref:-}" ] && continue
+
+  # B1. Push direto na main.
+  case "$remoteref" in
+    refs/heads/main)
+      fail "push direto na main e proibido. Abra PR (feat/* -> dev -> main)."
+      ;;
+  esac
+
+  # B2. Push de tag prod-*.
+  case "$remoteref" in
+    refs/tags/prod-*)
+      git fetch origin --quiet 2>/dev/null || true
+      tagname=${remoteref#refs/tags/}
+
+      # Gate: commit da tag tem de estar em origin/main.
+      if git rev-parse --verify --quiet origin/main >/dev/null 2>&1; then
+        if ! git merge-base --is-ancestor "$localsha" origin/main 2>/dev/null; then
+          fail "tag $tagname aponta para commit que NAO esta em origin/main."
+        fi
+      fi
+
+      # Gate 1: a tag nao pode apagar trabalho que ja esta em PROD.
+      prevtag=$(git tag --list 'prod-*' --sort=-creatordate \
+        | grep -vFx "$tagname" | head -1)
+      if [ -n "$prevtag" ]; then
+        prodtip=$(git rev-list -n1 "$prevtag" 2>/dev/null || true)
+        if [ -n "$prodtip" ] \
+          && ! git merge-base --is-ancestor "$prodtip" "$localsha" 2>/dev/null; then
+          fail "tag $tagname apagaria trabalho que ja esta em PROD (tip de $prevtag)."
+        fi
+      fi
+      ;;
+  esac
+done
+
+exit 0

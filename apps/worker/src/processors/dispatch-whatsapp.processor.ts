@@ -1,0 +1,182 @@
+import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { Logger } from '@nestjs/common';
+import { Prisma } from '@total-campanha/db';
+import type { Job } from 'bullmq';
+
+import { CryptoService } from '../common/crypto.service.js';
+import { CUSTO_REFERENCIA, UsageService } from '../common/usage.service.js';
+import { PrismaService } from '../common/prisma.service.js';
+import { resolverVariaveisWhatsapp } from '../common/render.js';
+import { MetaApiError, MetaWhatsappClient } from '../integrations/meta-whatsapp.client.js';
+
+interface DispatchJob {
+  mensagemId: string;
+  tenantId: string;
+  campanhaId: string;
+}
+
+/**
+ * Códigos de erro Meta que tratamos com mensagem legível (BOOTSTRAP 5.2):
+ *   131026 — mensagem indeliverable (número não tem WhatsApp / bloqueado)
+ *   131047 — janela de 24h expirou (não aplica a template, mas mapeamos)
+ *   131051 — tipo de mensagem não suportado
+ */
+const MOTIVOS_META: Record<number, string> = {
+  131026: 'Número indisponível no WhatsApp ou mensagem não entregável',
+  131047: 'Janela de 24h expirada',
+  131051: 'Tipo de mensagem não suportado',
+  131056: 'Limite de frequência atingido (rate limit)',
+};
+
+@Processor('dispatch-whatsapp', { concurrency: 5 })
+export class DispatchWhatsappProcessor extends WorkerHost {
+  private readonly logger = new Logger(DispatchWhatsappProcessor.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+    private readonly metaClient: MetaWhatsappClient,
+    private readonly usage: UsageService,
+  ) {
+    super();
+  }
+
+  async process(job: Job<DispatchJob>): Promise<void> {
+    const { mensagemId, tenantId, campanhaId } = job.data;
+
+    const ctx = await this.prisma.runInTenant(tenantId, async (tx) => {
+      const mensagem = await tx.mensagem.findUnique({ where: { id: mensagemId } });
+      if (!mensagem || mensagem.status === 'CANCELADA') return null;
+
+      const campanha = await tx.campanha.findUnique({ where: { id: campanhaId } });
+      if (!campanha) return null;
+      if (campanha.status === 'PAUSADA' || campanha.status === 'CANCELADA') {
+        await tx.mensagem.update({ where: { id: mensagemId }, data: { status: 'CANCELADA' } });
+        return null;
+      }
+      if (campanha.status === 'AGENDADA') {
+        await tx.campanha.update({
+          where: { id: campanhaId },
+          data: { status: 'DISPARANDO', iniciadaEm: new Date() },
+        });
+      }
+
+      const template = await tx.template.findUnique({ where: { id: campanha.templateId } });
+      const contato = mensagem.contatoId
+        ? await tx.contato.findUnique({ where: { id: mensagem.contatoId } })
+        : null;
+      const conexao = await tx.conexaoWhatsapp.findUnique({ where: { tenantId } });
+      return { mensagem, campanha, template, contato, conexao };
+    });
+
+    if (!ctx) return;
+    const { template, contato, conexao } = ctx;
+
+    if (!template || !template.metaTemplateName || !template.metaLanguage) {
+      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Template WhatsApp incompleto', false);
+      return;
+    }
+    if (!contato || !contato.telefoneE164) {
+      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Contato sem telefone', false);
+      return;
+    }
+    if (!contato.optInWhatsapp) {
+      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Contato sem opt-in WhatsApp', false);
+      return;
+    }
+    if (!conexao || conexao.status !== 'ATIVA') {
+      // Conexão caiu — retryable (admin pode reativar).
+      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Conexão WhatsApp inativa', true);
+      return;
+    }
+
+    try {
+      const token = await this.crypto.decryptToken(conexao.tokenEncrypted);
+      const variaveis = resolverVariaveisWhatsapp(
+        (template.variaveis as Array<{ key: string }>) ?? [],
+        {
+          nome: contato.nome,
+          email: contato.email,
+          telefoneE164: contato.telefoneE164,
+          extras: (contato.extras as Record<string, unknown>) ?? {},
+        },
+      );
+
+      const r = await this.metaClient.sendTemplate({
+        token,
+        phoneNumberId: conexao.phoneNumberId,
+        to: contato.telefoneE164,
+        templateName: template.metaTemplateName,
+        language: template.metaLanguage,
+        variables: variaveis,
+      });
+      const providerMessageId = r.messages[0]?.id ?? null;
+
+      await this.prisma.runInTenant(tenantId, async (tx) => {
+        await tx.mensagem.update({
+          where: { id: mensagemId },
+          data: {
+            status: 'ENVIADA',
+            enviadaEm: new Date(),
+            providerMessageId,
+            custoEstimadoBrl: new Prisma.Decimal(CUSTO_REFERENCIA.whatsappMarketingBr),
+            statusHistory: { push: { status: 'ENVIADA', at: new Date().toISOString() } },
+          },
+        });
+        await tx.campanha.update({
+          where: { id: campanhaId },
+          data: { totalEnviados: { increment: 1 } },
+        });
+      });
+
+      await this.usage.log(
+        tenantId,
+        'meta.whatsapp.marketing.br',
+        CUSTO_REFERENCIA.whatsappMarketingBr,
+        { mensagemId, campanhaId, providerMessageId },
+      );
+    } catch (err) {
+      if (err instanceof MetaApiError) {
+        const motivo =
+          (err.codigo !== undefined ? MOTIVOS_META[err.codigo] : undefined) ??
+          `Meta erro ${err.codigo ?? err.status}`;
+        await this.marcarFalha(tenantId, mensagemId, campanhaId, motivo, err.retryable);
+      } else {
+        this.logger.warn({ msg: 'dispatch_wa_erro_inesperado', mensagemId, err });
+        await this.marcarFalha(
+          tenantId,
+          mensagemId,
+          campanhaId,
+          err instanceof Error ? err.message.slice(0, 200) : 'Erro',
+          true,
+        );
+      }
+    }
+  }
+
+  private async marcarFalha(
+    tenantId: string,
+    mensagemId: string,
+    campanhaId: string,
+    motivo: string,
+    retryable: boolean,
+  ): Promise<void> {
+    await this.prisma.runInTenant(tenantId, async (tx) => {
+      await tx.mensagem.update({
+        where: { id: mensagemId },
+        data: {
+          status: 'FALHOU',
+          falhaMotivo: motivo,
+          // O RetryProcessor lê `retryable` no statusHistory para decidir reenfileirar.
+          statusHistory: {
+            push: { status: 'FALHOU', motivo, retryable, at: new Date().toISOString() },
+          },
+        },
+      });
+      await tx.campanha.update({
+        where: { id: campanhaId },
+        data: { totalFalhas: { increment: 1 } },
+      });
+    });
+  }
+}

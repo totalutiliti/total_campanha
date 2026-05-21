@@ -1,0 +1,16 @@
+{
+  // Parâmetros do deploy PROD. postgresAdminPassword e baseDomain são
+  // passados via --parameters na CLI (instrucao_deploys.md seção 3).
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "brazilsouth" },
+    "environment": { "value": "prod" },
+    "imageTag": { "value": "prod" },
+    "budgetMensalBrl": { "value": 3000 },
+    "alertEmail": { "value": "joao@totalutiliti.com.br" }
+    // postgresAdminPassword → --parameters postgresAdminPassword="$PGPASS"
+    // baseDomain            → --parameters baseDomain=""  (Fase A)
+    //                         --parameters baseDomain="totalcampanha.com.br" (Fase B)
+  }
+}

@@ -1,0 +1,42 @@
+name: Tag PROD
+
+# Cria a tag git `prod-AAAAMMDD-HHmm` no commit deployado, APÓS um deploy
+# bem-sucedido. Essa tag é o marcador "este commit está em PROD" — lida
+# pelos gates de anti-regressão (anti-regression.yml e .githooks/pre-push).
+#
+# Dispara quando QUALQUER um dos 3 workflows de deploy conclui. O primeiro a
+# concluir com sucesso cria a tag; os demais detectam que já existe tag para
+# aquele SHA e não fazem nada → exatamente uma tag prod-* por commit deployado.
+
+on:
+  workflow_run:
+    workflows: ['Deploy API', 'Deploy Web', 'Deploy Worker']
+    types: [completed]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    # Só tagueia se o deploy que disparou este workflow teve sucesso.
+    if: github.event.workflow_run.conclusion == 'success'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Criar tag prod-* (se ainda não existir para este commit)
+        run: |
+          SHA='${{ github.event.workflow_run.head_sha }}'
+          EXISTENTE=$(git tag --points-at "$SHA" --list 'prod-*' | head -1)
+          if [ -n "$EXISTENTE" ]; then
+            echo "Commit $SHA já tem tag de PROD: $EXISTENTE — nada a fazer."
+            exit 0
+          fi
+          TAG="prod-$(date -u +%Y%m%d-%H%M)"
+          echo "Criando tag $TAG em $SHA"
+          git tag -a "$TAG" "$SHA" -m "Deploy PROD — $TAG"
+          git push origin "$TAG"

@@ -1,0 +1,12 @@
+{
+  "// nota": "tsconfig autocontido (sem extends) — usado só por ts-node no seed. Evita a fragilidade de resolver extends via symlink do pnpm.",
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2022",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": false
+  }
+}

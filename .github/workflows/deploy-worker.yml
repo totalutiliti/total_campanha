@@ -1,0 +1,98 @@
+name: Deploy Worker
+
+on:
+  push:
+    branches: [main]
+    paths: ['apps/worker/**', 'packages/**', '.github/workflows/deploy-worker.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+env:
+  RG: rg-totalcampanha-prod
+  APP: tc-worker-prod
+  ACR: acrtotalcampanha01
+  IMAGE: tc-worker
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.12.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint, typecheck, test
+        run: |
+          pnpm lint
+          pnpm typecheck
+          pnpm test
+          pnpm test:tenant-isolation
+
+      - name: Login Azure
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Login ACR
+        run: az acr login --name $ACR
+
+      - name: Build & push
+        run: |
+          IMAGE_TAG=prod-${GITHUB_SHA::7}
+          docker build -f apps/worker/Dockerfile \
+            -t $ACR.azurecr.io/$IMAGE:$IMAGE_TAG .
+          docker push $ACR.azurecr.io/$IMAGE:$IMAGE_TAG
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Deploy Container App
+        run: |
+          az containerapp update -g $RG -n $APP \
+            --image $ACR.azurecr.io/$IMAGE:$IMAGE_TAG
+
+      - name: Wait revision healthy
+        run: |
+          # Worker não tem ingress — valida o provisioning/running state da revision.
+          for i in {1..30}; do
+            STATE=$(az containerapp revision list -g $RG -n $APP \
+              --query "[?properties.active] | sort_by(@, &properties.createdTime) | [-1].properties.runningState" -o tsv || true)
+            echo "tentativa $i: runningState=$STATE"
+            if [ "$STATE" = "Running" ]; then echo "worker OK"; exit 0; fi
+            sleep 10
+          done
+          echo "worker não ficou Running"
+          exit 1
+
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          PREV=$(az containerapp revision list -g $RG -n $APP \
+            --query "sort_by(@, &properties.createdTime) | [-2].name" -o tsv)
+          if [ -n "$PREV" ]; then
+            echo "Rollback (ativando revision $PREV)"
+            az containerapp revision activate -g $RG -n $APP --revision "$PREV"
+          fi
+
+      - name: Notify Slack
+        if: always()
+        run: |
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -s -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'content-type: application/json' \
+              -d "{\"text\":\"Deploy tc-worker: ${{ job.status }} (${GITHUB_SHA::7})\"}"
+          fi

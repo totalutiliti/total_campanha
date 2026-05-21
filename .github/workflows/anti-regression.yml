@@ -1,0 +1,101 @@
+name: Anti-Regression
+
+# Blindagem contra regressão (ver CLAUDE.md → "Blindagem contra regressão").
+# Roda em toda PR destinada à main. Os 3 jobs abaixo são status checks
+# OBRIGATÓRIOS — configure-os como required em Settings → Branches
+# (ver docs/branch-protection.md).
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # --------------------------------------------------------------------------
+  # (a) A PR contém o commit que está atualmente em PROD?
+  #     Se a última tag prod-* NÃO for ancestral do head da PR, há regressão:
+  #     a PR foi feita de uma base que não inclui o que já está em produção.
+  # --------------------------------------------------------------------------
+  no-prod-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: HEAD da PR contém o tip de PROD?
+        run: |
+          PROD_TAG=$(git tag --list 'prod-*' --sort=-creatordate | head -1)
+          if [ -z "$PROD_TAG" ]; then
+            echo "Nenhuma tag prod-* ainda — primeiro deploy. Check aprovado."
+            exit 0
+          fi
+          PROD_TIP=$(git rev-list -n1 "$PROD_TAG")
+          echo "PROD atual: $PROD_TAG ($PROD_TIP)"
+          if git merge-base --is-ancestor "$PROD_TIP" HEAD; then
+            echo "OK — a PR inclui o que está em PROD."
+          else
+            echo "::error::REGRESSAO: a PR nao contem o commit em PROD ($PROD_TAG)."
+            echo "::error::Faca rebase/merge de main nesta branch antes de mergear."
+            exit 1
+          fi
+
+  # --------------------------------------------------------------------------
+  # (b) Arquivos deletados em diretórios sensíveis exigem label
+  #     "approved-deletion" na PR.
+  # --------------------------------------------------------------------------
+  deleted-files-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar deleções em diretórios sensíveis
+        run: |
+          BASE=${{ github.event.pull_request.base.sha }}
+          HEAD=${{ github.event.pull_request.head.sha }}
+          # Diretórios sensíveis — ajuste aqui se necessário.
+          SENSIVEIS='^(apps|packages|infra|\.github|docs/runbooks)/'
+          DELETADOS=$(git diff --name-status "$BASE...$HEAD" | grep '^D' | awk '{print $2}' | grep -E "$SENSIVEIS" || true)
+          if [ -z "$DELETADOS" ]; then
+            echo "Nenhuma deleção em diretório sensível."
+            exit 0
+          fi
+          echo "Arquivos deletados em diretório sensível:"
+          echo "$DELETADOS" | sed 's/^/  /'
+          LABELS='${{ join(github.event.pull_request.labels.*.name, ',') }}'
+          case ",$LABELS," in
+            *,approved-deletion,*)
+              echo "Label 'approved-deletion' presente — deleções aprovadas." ;;
+            *)
+              echo "::error::Ha delecoes em diretorio sensivel sem a label 'approved-deletion'."
+              echo "::error::Revise as delecoes e adicione a label na PR para liberar o merge."
+              exit 1 ;;
+          esac
+
+  # --------------------------------------------------------------------------
+  # (c) A branch de origem é uma feature branch (ou dev) — nunca main/tag.
+  # --------------------------------------------------------------------------
+  branch-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validar branch de origem
+        run: |
+          SRC='${{ github.head_ref }}'
+          echo "Branch de origem: $SRC"
+          case "$SRC" in
+            main)
+              echo "::error::PR de 'main' para 'main' nao faz sentido."
+              exit 1 ;;
+            dev|feat/*|fix/*|hotfix/*|chore/*|docs/*)
+              echo "OK — origem valida ($SRC)." ;;
+            *)
+              echo "::error::Branch '$SRC' fora do padrao. Use dev, feat/*, fix/*, hotfix/*, chore/*, docs/*."
+              exit 1 ;;
+          esac

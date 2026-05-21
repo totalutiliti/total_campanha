@@ -1,0 +1,13 @@
+{
+  "canal": "EMAIL",
+  "nome": "Lançamento de perfume",
+  "descricao": "Anúncio de novo perfume para clientes recorrentes da loja.",
+  "assunto": "{{nome}}, chegou {{produto}} 🌸",
+  "mjml": "<mjml><mj-body width=\"600px\"><mj-section><mj-column><mj-text font-size=\"22px\" font-weight=\"700\">{{produto}}</mj-text><mj-text font-size=\"15px\">Olá {{nome}}, separamos esse lançamento pensando em você. Notas predominantes: {{notas}}.</mj-text><mj-button href=\"{{linkProduto}}\">Conhecer agora</mj-button></mj-column></mj-section></mj-body></mjml>",
+  "variaveis": [
+    { "key": "nome", "exemplo": "Aline" },
+    { "key": "produto", "exemplo": "Sublime 100ml" },
+    { "key": "notas", "exemplo": "jasmim, baunilha, sândalo" },
+    { "key": "linkProduto", "exemplo": "https://essence.com.br/sublime" }
+  ]
+}

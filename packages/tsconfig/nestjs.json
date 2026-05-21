@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "removeComments": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "strictPropertyInitialization": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    // Apps NestJS são aplicações, não libraries — não emitem .d.ts.
+    // Sem isso, tsc tenta nomear tipos do @prisma/client aninhado e quebra (TS2742).
+    "declaration": false,
+    "declarationMap": false,
+    "composite": false,
+    // Apps não usam build incremental — o .tsbuildinfo fica fora do dist e o
+    // `deleteOutDir` do nest não o remove, fazendo o tsc pular o emit.
+    "incremental": false
+  }
+}

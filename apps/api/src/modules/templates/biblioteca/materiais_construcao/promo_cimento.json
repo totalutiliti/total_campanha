@@ -1,0 +1,12 @@
+{
+  "canal": "WHATSAPP",
+  "nome": "Promoção cimento por palete",
+  "descricao": "Comunicação de oferta de cimento em volume para construtoras parceiras.",
+  "textoExemplo": "Olá {{nome}}, hoje temos {{produto}} a {{precoPorSaca}} (palete fechado de 40 sacas). Vale até {{validade}}. Posso reservar?",
+  "variaveis": [
+    { "key": "nome", "exemplo": "Carlos" },
+    { "key": "produto", "exemplo": "Cimento CPII-E 50kg" },
+    { "key": "precoPorSaca", "exemplo": "R$ 32,90" },
+    { "key": "validade", "exemplo": "sexta às 18h" }
+  ]
+}
