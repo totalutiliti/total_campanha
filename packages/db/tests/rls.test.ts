@@ -114,10 +114,12 @@ describe('RLS — comportamento em runtime', () => {
 
   beforeAll(async () => {
     // Setup: 2 tenants, 1 contato em cada.
+    // $n::uuid — Prisma envia parâmetros como text; o cast explícito evita
+    // "column id is of type uuid but expression is of type text" (42804).
     await adminPrisma.$executeRawUnsafe(
       `INSERT INTO tenants (id, slug, cnpj, razao_social, plano, status, created_at, updated_at)
-       VALUES ($1, 'tenant-a', '00000000000001', 'Tenant A LTDA', 'STARTER', 'ATIVO', now(), now()),
-              ($2, 'tenant-b', '00000000000002', 'Tenant B LTDA', 'STARTER', 'ATIVO', now(), now())`,
+       VALUES ($1::uuid, 'tenant-a', '00000000000001', 'Tenant A LTDA', 'STARTER', 'ATIVO', now(), now()),
+              ($2::uuid, 'tenant-b', '00000000000002', 'Tenant B LTDA', 'STARTER', 'ATIVO', now(), now())`,
       tenantA,
       tenantB,
     );
@@ -125,9 +127,9 @@ describe('RLS — comportamento em runtime', () => {
     await adminPrisma.$executeRawUnsafe(
       `INSERT INTO contatos (id, tenant_id, email, telefone_e164, tags, extras,
                              opt_in_email, opt_in_whatsapp, created_at, updated_at)
-       VALUES (gen_random_uuid(), $1, 'a@a.com', '+5511900000001', ARRAY[]::text[], '{}'::jsonb,
+       VALUES (gen_random_uuid(), $1::uuid, 'a@a.com', '+5511900000001', ARRAY[]::text[], '{}'::jsonb,
                true, true, now(), now()),
-              (gen_random_uuid(), $2, 'b@b.com', '+5511900000002', ARRAY[]::text[], '{}'::jsonb,
+              (gen_random_uuid(), $2::uuid, 'b@b.com', '+5511900000002', ARRAY[]::text[], '{}'::jsonb,
                true, true, now(), now())`,
       tenantA,
       tenantB,
@@ -160,7 +162,7 @@ describe('RLS — comportamento em runtime', () => {
         await tx.$executeRawUnsafe(
           `INSERT INTO contatos (id, tenant_id, email, tags, extras,
                                  opt_in_email, opt_in_whatsapp, created_at, updated_at)
-           VALUES (gen_random_uuid(), $1, 'cross@a.com', ARRAY[]::text[], '{}'::jsonb,
+           VALUES (gen_random_uuid(), $1::uuid, 'cross@a.com', ARRAY[]::text[], '{}'::jsonb,
                    true, true, now(), now())`,
           tenantA,
         );
