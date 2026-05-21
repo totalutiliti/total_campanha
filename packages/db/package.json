@@ -22,6 +22,7 @@
     "migrate:status": "prisma migrate status",
     "studio": "prisma studio",
     "seed": "ts-node --transpile-only --project tsconfig.seed.json prisma/seed.ts",
+    "criar-super-admin": "ts-node --transpile-only --project tsconfig.seed.json prisma/criar-super-admin.ts",
     "test": "jest --passWithNoTests",
     "test:rls": "jest tests/rls.test.ts --runInBand"
   },
