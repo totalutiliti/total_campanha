@@ -17,8 +17,9 @@ export class ExportarContatosService {
   async gerarCsv(tenantId: string, incluirExcluidos = false): Promise<string> {
     const linhas: Array<Record<string, string>> = [];
     let cursor: string | undefined;
+    let temMais = true;
 
-    while (true) {
+    while (temMais) {
       const lote = await this.prisma.runInTenant(tenantId, (tx) =>
         tx.contato.findMany({
           where: incluirExcluidos ? {} : { excluidoEm: null },
@@ -27,7 +28,10 @@ export class ExportarContatosService {
           orderBy: { id: 'asc' },
         }),
       );
-      if (lote.length === 0) break;
+      if (lote.length === 0) {
+        temMais = false;
+        break;
+      }
       for (const c of lote) {
         linhas.push({
           nome: c.nome ?? '',

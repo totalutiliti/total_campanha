@@ -10,6 +10,41 @@
 
 ---
 
+## 2026-05-21 — Repo git + blindagem + segurança + super admin
+
+**Categoria:** Bootstrap / Segurança
+
+- **Repositório git criado** e pushed: `github.com/totalutiliti/total_campanha`.
+  Branches `main` (genesis) e `dev`. `core.hooksPath=.githooks` ativo.
+- **Blindagem contra regressão** (prompt 23 — `0000_passos_antes_da_producao/`):
+  - `CLAUDE.md` ganhou a seção "Blindagem contra regressão (Git)" — modelo de
+    branches, gates de deploy literais, hotfix, higiene, histórico de incidentes.
+  - `.githooks/pre-commit` + `.githooks/pre-push` versionados (instala via
+    script `prepare` no `pnpm install`).
+  - `.github/workflows/anti-regression.yml` (3 checks de PR) + `tag-prod.yml`
+    (tag `prod-AAAAMMDD-HHmm` após deploy).
+  - `docs/runbooks/deploy-prod.md` (§0-§11) + `docs/working-with-claude-code.md`
+    + `docs/branch-protection.md`.
+- **Guia de segurança** (`00_prompt-seguranca-senhas.md`) — escopo "lacunas no
+  repo" (Managed Identity NÃO migrado — decisão: Azure ainda não provisionado):
+  - `.gitleaks.toml` + gitleaks no `pre-commit` (se instalado) + workflow
+    `gitleaks.yml` (PR/push/semanal).
+  - `.gitignore` alinhado ao padrão `.env` / `.env.*` / `!.env.example`.
+  - Auditoria: o projeto já cumpria Argon2id+pepper, RBAC, rate limit, Helmet,
+    CORS, audit log, Key Vault no Bicep.
+- **Super admin** (`packages/db/prisma/criar-super-admin.ts` + script
+  `pnpm --filter @total-campanha/db criar-super-admin`):
+  - Criado `joao@totalutiliti.com.br` com `isSuperAdmin=true` no DB de dev.
+  - Login: `POST /api/v1/admin/auth/login` (escopo `/admin`, cross-tenant).
+  - ⚠️ `pnpm db:seed` faz TRUNCATE em `users` — após re-seed, re-rodar o
+    `criar-super-admin`. Super admin NÃO está no seed (por design — RULES 1.6).
+
+**Pendências:**
+- Configurar branch protection na UI do GitHub (`docs/branch-protection.md`).
+- Migração Managed Identity (PG/Redis/Storage) — adiada até Azure provisionado.
+
+---
+
 ## 2026-05-21 — Primeiro build + run real (8 fixes)
 
 **Categoria:** Bootstrap / Lições

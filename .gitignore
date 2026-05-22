@@ -19,13 +19,12 @@ pnpm-debug.log*
 coverage/
 .nyc_output/
 
-# Env (NUNCA commitar — RULES 9.7)
+# Segredos — NUNCA commitar (RULES 9.7 / 00_prompt-seguranca-senhas.md §7.3)
 .env
-.env.local
-.env.*.local
-.env.development
-.env.staging
-.env.production
+.env.*
+!.env.example
+*.publishsettings
+gitleaks-report.json
 
 # IDE
 .vscode/

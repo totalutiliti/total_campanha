@@ -8,4 +8,9 @@ module.exports = {
   transform: {
     '^.+\\.ts$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.json' }],
   },
+  // Imports ESM usam sufixo .js (módulo NodeNext) — o jest-resolve não sabe
+  // mapear .js→.ts; este mapper remove o .js de imports relativos.
+  moduleNameMapper: {
+    '^(\\.{1,2}/.*)\\.js$': '$1',
+  },
 };
