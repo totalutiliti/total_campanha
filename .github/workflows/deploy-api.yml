@@ -1,9 +1,12 @@
 name: Deploy API
 
 on:
-  push:
-    branches: [main]
-    paths: ['apps/api/**', 'packages/**', '.github/workflows/deploy-api.yml']
+  # Deploy automático em push na main fica DESABILITADO até o Azure estar
+  # provisionado (falta o secret AZURE_CREDENTIALS). Reative o bloco `push`
+  # quando a infra estiver pronta — ver docs/runbooks/deploy-prod.md.
+  # push:
+  #   branches: [main]
+  #   paths: ['apps/api/**', 'packages/**', '.github/workflows/deploy-api.yml']
   workflow_dispatch:
 
 concurrency:
