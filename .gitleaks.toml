@@ -13,6 +13,7 @@ paths = [
   '''\.githooks/.*''',          # os hooks contêm regex de exemplo, não segredos
   '''docs/.*''',
   '''instrucoes/.*''',
+  '''prompts-validacao/.*''',   # prompts de validação contêm segredos de EXEMPLO
 ]
 # Valores placeholder do .env.example não são segredos reais.
 regexes = [

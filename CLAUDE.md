@@ -188,3 +188,4 @@ gh workflow run deploy-api.yml --ref main
 | LGPD operador/controlador | `instrucoes/instrucao_lgpd_dpa.md` |
 | Runbook de deploy PROD (passo a passo) | `docs/runbooks/deploy-prod.md` |
 | Como usar Claude Code neste projeto | `docs/working-with-claude-code.md` |
+| Validação pré-produção (22 prompts) | `prompts-validacao/` |
