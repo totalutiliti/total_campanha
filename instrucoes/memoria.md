@@ -10,6 +10,49 @@
 
 ---
 
+## 2026-05-22 — Blindagem mergeada, CI verde, deploys manual-only
+
+**Categoria:** Bootstrap / CI
+
+Fechamento do trabalho de blindagem: tudo revisado por PR e mergeado na `main`.
+
+- **Fluxo de PR exercitado de verdade** — 3 PRs, todos passando pelos checks
+  de anti-regressão antes do merge:
+  - PR #1 `chore/seguranca-e-superadmin → dev`
+  - PR #2 `dev → main` (promoção — `anti-regression.yml` validado)
+  - PR #3 `chore/deploy-manual-ate-azure → main`
+  - Estado: `main` = `dev` = `78af443`. Branches `chore/*` deletadas após merge.
+
+- **CI loop — correções para deixar o `lint-typecheck-test` verde:**
+  - `packages/db/prisma/migrations/0001_init/migration.sql` — **faltava**;
+    gerada via `prisma migrate diff --from-empty`. Sem ela `migrate deploy`
+    (usado pelos testes RLS/tenant-isolation e pelo deploy PROD) só tinha a
+    `0002_enable_rls` e falhava. Débito de migration history → resolvido.
+  - `apps/api/jest.config.cjs` + `apps/worker/jest.config.cjs` — sem config,
+    `jest` varria `test/**/*.spec.ts` com babel (sem TS) → SyntaxError em
+    `import type`. Configs escopam `pnpm test` a `src/**/*.spec.ts` com ts-jest.
+  - `moduleNameMapper '^(\.{1,2}/.*)\.js$' → '$1'` nos 5 configs jest —
+    imports ESM com sufixo `.js` não resolviam no jest-resolve.
+  - `apps/web` `test` virou no-op (web não tem jest; e2e é Playwright).
+  - `rls.test.ts` — cast `::uuid` nos parâmetros de `$executeRawUnsafe`
+    (Prisma envia params como text → erro 42804 em coluna uuid).
+  - 2 erros de lint reais (var não usada em `analytics.service`, `while(true)`
+    em `exportar-contatos.service`).
+
+- **Deploy workflows manual-only** (PR #3) — `deploy-api/web/worker.yml` tinham
+  trigger `push: main` e falhavam em todo push (sem `AZURE_CREDENTIALS` /
+  infra Azure). Trigger `push` comentado; só `workflow_dispatch`. **Reativar
+  ao provisionar o Azure.**
+
+- **Verificado**: `tag-prod.yml` pulou corretamente (nenhum deploy com
+  sucesso → não criou tag `prod-*` falsa). A blindagem funciona como projetada.
+
+**Pendência única**: configurar branch protection na UI do GitHub
+(`docs/branch-protection.md`) — os checks de anti-regressão existem mas só
+*bloqueiam* merge depois disso.
+
+---
+
 ## 2026-05-21 — Repo git + blindagem + segurança + super admin
 
 **Categoria:** Bootstrap / Segurança
