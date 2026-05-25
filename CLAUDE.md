@@ -179,6 +179,8 @@ gh workflow run deploy-api.yml --ref main
 | Schema, rotas, contratos | `docs/SPECS.md` |
 | Regras de negócio e segurança | `docs/RULES.md` |
 | Padrões de código com exemplos | `docs/SKILL.md` |
+| Princípios de UX (perenes, regem todo design) | `docs/UX_PRINCIPLES.md` |
+| Backlog de UX priorizado por sprint | `docs/UX_BACKLOG.md` |
 | Como construir do zero (passo a passo) | `docs/BOOTSTRAP.md` |
 | Memória de contexto do Antigravity | `instrucoes/memoria.md` |
 | Azure (deploy, scaling, custos) | `instrucoes/instrucao_azure.md` |

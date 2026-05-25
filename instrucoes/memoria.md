@@ -10,6 +10,77 @@
 
 ---
 
+## 2026-05-25 — Auditoria de UX + princípios e backlog versionados
+
+**Categoria:** UX / Produto
+
+Primeira passada profissional de UX no produto (estado atual = "prototipagem
+funcional"). Diagnóstico, princípios e backlog acionável foram versionados em
+`docs/UX_PRINCIPLES.md` e `docs/UX_BACKLOG.md` para o time.
+
+**Estado atual do frontend (apenas observação, não corrigido nesta sessão):**
+
+- Estrutura mínima funcional: login, dashboard, contatos, segmentos, templates,
+  conexões, wizard WhatsApp BYOA, opt-in/opt-out públicos. Auth + multi-tenant
+  + 2FA OK.
+- 3 pontos fortes notáveis: wizard WhatsApp BYOA (`whatsapp-wizard.tsx` — pré-req
+  antes dos dados, copy com feedback, token mascarado), landing pública de opt-in
+  (sem cookies/rastreador, LGPD-pronta), seletor multi-tenant no login.
+- Gaps críticos: shadcn/ui NÃO instalado (apesar do CLAUDE.md listar no stack —
+  `apps/web/src/components/ui/` está vazio); 0 aria-labels (`grep aria-label` em
+  `apps/web/src` = 0); sem dark mode; sem skeleton loading (texto cru
+  "carregando…"); empty states sem CTA; sem toast/notification system; sem
+  tradução de erro Meta/SES (joga `e.message` cru na tela); FiltroBuilder pede
+  input livre de campo (`extras.regiao`) — UX de dev tool, não de PME; status
+  WhatsApp como string crua sem semáforo nem explicação.
+- Telas que não existem mas o produto promete: `/signup`, `/campanhas/nova`,
+  `/campanhas/[id]`, `/inbox`, `/super-admin`, `/configuracoes`, `/compliance`,
+  importação de CSV com mapeamento.
+
+**Princípios declarados em `docs/UX_PRINCIPLES.md` (10):**
+
+1. Falar a língua do dono da PME, não a do desenvolvedor (com vocabulário oficial:
+   Tenant → Empresa, WABA → "Conta WhatsApp Business", etc.).
+2. Decisões caras com fricção, baratas com fluidez (regra dos disparos:
+   "envio de teste" obrigatório antes do 1º real; > 100 contatos exige digitar
+   nome da campanha; > 1000 exige confirmar teto de custo).
+3. Custo é parte da UI, sempre (estimativa antes, real depois).
+4. LGPD visível como feature vendável, não escondida.
+5. Erro de provedor traduzido sempre (via `error-mapper.ts`).
+6. Mobile-first não opcional (testar em iPhone SE / Galaxy S8 em cada PR).
+7. WCAG AA é piso, não meta.
+8. Loading com skeleton, empty state com CTA.
+9. Toda lista tem busca + filtro + ação em massa.
+10. i18n desde o dia 1 (mesmo só PT-BR).
+
+Inclui checklist de revisão de PR de UI.
+
+**Backlog em `docs/UX_BACKLOG.md` (22 itens) organizado em sprints:**
+
+- **Sprint 1 (fundação):** UX-01 instalar shadcn, UX-02 toast+error-mapper,
+  UX-03 skeleton+empty states, UX-04 reformular dashboard.
+- **Sprint 2 (coração):** UX-05 `/signup` + onboarding, UX-06 wizard de criar
+  campanha (5 passos com envio de teste obrigatório), UX-07 `/campanhas/[id]`
+  timeline, UX-08 custo+saldo permanente.
+- **Sprint 3 (qualidade/diferencial):** UX-09 refatorar FiltroBuilder, UX-10
+  `/inbox` com janela 24h, UX-11 conexões com saúde acionável, UX-12 refinos
+  wizard WhatsApp, UX-13 aba compliance LGPD, UX-14 import CSV, UX-15 mobile
+  audit, UX-16 acessibilidade 1ª leva.
+- **Backlog estendido:** super admin, configurações, reset de senha, i18n,
+  A/B testing, sugestões de copy IA.
+
+Cada item tem critérios de pronto e referencia o princípio que o motiva.
+Definidas 7 métricas para Application Insights (TTV P50 < 30min como métrica-mãe).
+
+**Tabela "Onde achar mais detalhes" do `CLAUDE.md` atualizada** com referências
+aos dois novos documentos.
+
+**Pendente:** discussão com o João sobre quais itens entram no próximo sprint
+(recomendação minha: Sprint 1 inteiro — destrava todo o resto e é ~1 semana de
+trabalho). Nenhum código foi alterado nesta sessão; é só documentação.
+
+---
+
 ## 2026-05-22 — Blindagem mergeada, CI verde, deploys manual-only
 
 **Categoria:** Bootstrap / CI
