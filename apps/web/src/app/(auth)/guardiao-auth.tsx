@@ -47,6 +47,9 @@ export function GuardiaoAuth({ children }: { children: React.ReactNode }) {
             Total Campanha
           </Link>
           <nav className="flex-1 flex gap-4 text-sm text-gray-700">
+            <Link href="/campanhas" className="hover:text-gray-900">
+              Campanhas
+            </Link>
             <Link href="/contatos" className="hover:text-gray-900">
               Contatos
             </Link>
