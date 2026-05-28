@@ -125,13 +125,17 @@ function PassoPreRequisitos({ onContinuar }: { onContinuar: () => void }) {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Antes de começar</h2>
+      <p className="text-sm text-gray-600">
+        Conectar o WhatsApp oficial exige uma conta na Meta. Você (ou quem cuida da sua
+        TI/marketing) vai precisar de:
+      </p>
       <ul className="space-y-2 text-sm">
         <li className="flex gap-2">
-          <span>✓</span>
+          <span className="text-gray-400">•</span>
           <span>CNPJ ativo registrado no Meta Business Manager.</span>
         </li>
         <li className="flex gap-2">
-          <span>✓</span>
+          <span className="text-gray-400">•</span>
           <span>
             Conta WhatsApp Business API criada em{' '}
             <a
@@ -146,14 +150,14 @@ function PassoPreRequisitos({ onContinuar }: { onContinuar: () => void }) {
           </span>
         </li>
         <li className="flex gap-2">
-          <span>✓</span>
+          <span className="text-gray-400">•</span>
           <span>
             Número de telefone dedicado <strong>e</strong> verificado dentro da WABA. (Não
             funciona com número que está no app pessoal.)
           </span>
         </li>
         <li className="flex gap-2">
-          <span>✓</span>
+          <span className="text-gray-400">•</span>
           <span>App de sistema criado no Meta for Developers para emitir token permanente.</span>
         </li>
       </ul>
@@ -240,8 +244,12 @@ function PassoDados({
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Validação</h2>
       <p className="text-sm text-gray-600">
-        Cole os IDs e o token. A plataforma faz uma chamada à Meta para validar antes de
-        salvar — o token será cifrado em repouso (pgcrypto).
+        Cole os IDs e o token. A plataforma valida com a Meta antes de salvar e guarda o
+        token criptografado — ele nunca fica visível depois.
+      </p>
+      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
+        Use o <strong>token da Meta</strong> (começa com EAA…), não a senha do seu login. Se o
+        navegador preencher sozinho, apague e cole o token correto.
       </p>
 
       <Campo label="WABA ID">
@@ -249,6 +257,9 @@ function PassoDados({
           value={dados.wabaId}
           onChange={(e) => onChange({ ...dados, wabaId: e.target.value.trim() })}
           placeholder="ex: 123456789012345"
+          name="wabaId"
+          autoComplete="off"
+          inputMode="numeric"
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
         />
       </Campo>
@@ -258,6 +269,9 @@ function PassoDados({
           value={dados.phoneNumberId}
           onChange={(e) => onChange({ ...dados, phoneNumberId: e.target.value.trim() })}
           placeholder="ex: 987654321012345"
+          name="phoneNumberId"
+          autoComplete="off"
+          inputMode="numeric"
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
         />
       </Campo>
@@ -268,6 +282,8 @@ function PassoDados({
           value={dados.token}
           onChange={(e) => onChange({ ...dados, token: e.target.value.trim() })}
           placeholder="EAA..."
+          name="metaToken"
+          autoComplete="new-password"
           className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
         />
       </Campo>
