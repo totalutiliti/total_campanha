@@ -96,20 +96,44 @@ export async function apiFetch<T>(opts: ApiClientOptions, req: ApiRequest): Prom
 }
 
 /**
- * Chama POST /auth/refresh usando o cookie HttpOnly. Notifica o caller via
- * `onAccessToken` e devolve o token novo para a chamada que disparou o refresh.
+ * Refresh em "single-flight": garante UMA única chamada a /auth/refresh por vez.
+ *
+ * O refresh token tem rotation com detecção de reuso no backend — duas chamadas
+ * concorrentes com o mesmo token são tratadas como reuso e invalidam a sessão
+ * inteira. Isso acontecia no boot (React StrictMode dispara o efeito 2x em dev)
+ * e em páginas que fazem várias chamadas em paralelo. Compartilhando a mesma
+ * promise, todos os chamadores concorrentes usam o mesmo token uma única vez.
+ */
+let refreshEmAndamento: Promise<string> | null = null;
+
+export function chamarRefresh(): Promise<string> {
+  if (!refreshEmAndamento) {
+    refreshEmAndamento = (async () => {
+      const r = await fetch(`${baseUrl()}/auth/refresh`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { accept: 'application/json' },
+      });
+      if (!r.ok) {
+        throw new Error('Refresh falhou.');
+      }
+      const json = (await r.json()) as { accessToken?: string };
+      if (!json.accessToken) throw new Error('Refresh sem accessToken.');
+      return json.accessToken;
+    })().finally(() => {
+      // Libera para o próximo ciclo (chamadas sequenciais usam o token rotacionado).
+      refreshEmAndamento = null;
+    });
+  }
+  return refreshEmAndamento;
+}
+
+/**
+ * Wrapper usado pelo apiFetch: faz o refresh (single-flight) e notifica o caller
+ * via `onAccessToken`.
  */
 async function refresh(opts: ApiClientOptions): Promise<string> {
-  const r = await fetch(`${baseUrl()}/auth/refresh`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { accept: 'application/json' },
-  });
-  if (!r.ok) {
-    throw new Error('Refresh falhou.');
-  }
-  const json = (await r.json()) as { accessToken?: string };
-  if (!json.accessToken) throw new Error('Refresh sem accessToken.');
-  opts.onAccessToken(json.accessToken);
-  return json.accessToken;
+  const accessToken = await chamarRefresh();
+  opts.onAccessToken(accessToken);
+  return accessToken;
 }

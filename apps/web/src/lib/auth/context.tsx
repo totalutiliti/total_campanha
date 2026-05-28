@@ -2,7 +2,7 @@
 
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
-import { apiFetch, baseUrl, ApiRequest } from './api-client';
+import { apiFetch, baseUrl, chamarRefresh, ApiRequest } from './api-client';
 
 export type Role = 'ADMIN' | 'EDITOR_CAMPANHA' | 'VISUALIZADOR';
 
@@ -66,15 +66,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelado = false;
     (async () => {
       try {
-        const r = await fetch(`${baseUrl()}/auth/refresh`, {
-          method: 'POST',
-          credentials: 'include',
-        });
-        if (!r.ok) {
+        let accessToken: string;
+        try {
+          accessToken = await chamarRefresh();
+        } catch {
           if (!cancelado) setEstado({ tipo: 'anonimo' });
           return;
         }
-        const { accessToken } = (await r.json()) as { accessToken: string };
         if (cancelado) return;
         tokenRef.current = accessToken;
 
