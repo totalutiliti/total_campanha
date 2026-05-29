@@ -62,6 +62,12 @@ export default function NovaCampanhaPage() {
     };
   }, [api, canal]);
 
+  // Pré-seleciona o grupo vindo da seleção manual de contatos (?segmento=ID).
+  useEffect(() => {
+    const seg = new URLSearchParams(window.location.search).get('segmento');
+    if (seg) setSegmentoId(seg);
+  }, []);
+
   async function submeter(e: React.FormEvent) {
     e.preventDefault();
     setErro(null);

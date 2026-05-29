@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { useAuth } from '../../../lib/auth/context';
@@ -24,9 +25,12 @@ interface Resposta {
 
 export default function ContatosListPage() {
   const { api } = useAuth();
+  const router = useRouter();
   const [dados, setDados] = useState<Resposta | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [busca, setBusca] = useState('');
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [criando, setCriando] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -51,6 +55,42 @@ export default function ContatosListPage() {
       clearTimeout(timer);
     };
   }, [api, busca]);
+
+  function alternar(id: string) {
+    setSel((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  }
+
+  async function criarGrupoECampanha() {
+    const nome = window.prompt(
+      'Dê um nome para este grupo de contatos selecionados:',
+      'Selecionados',
+    );
+    if (!nome || !nome.trim()) return;
+    setCriando(true);
+    setErro(null);
+    try {
+      const grupo = await api<{ id: string }>({
+        method: 'POST',
+        path: '/segmentos',
+        body: {
+          nome: nome.trim(),
+          filtros: {
+            modo: 'or',
+            condicoes: [{ campo: 'id', operador: 'in', valor: Array.from(sel) }],
+          },
+        },
+      });
+      router.push(`/campanhas/nova?segmento=${grupo.id}`);
+    } catch (e) {
+      setErro(mensagemErro(e));
+      setCriando(false);
+    }
+  }
 
   const total = dados?.paginacao.total ?? 0;
   const mostrando = dados?.itens.length ?? 0;
@@ -88,6 +128,29 @@ export default function ContatosListPage() {
         </p>
       )}
 
+      {sel.size > 0 && (
+        <div className="mb-3 flex items-center gap-3 flex-wrap rounded-md border border-gray-900 bg-gray-50 px-3 py-2 text-sm">
+          <span className="font-medium">
+            {sel.size} selecionado{sel.size === 1 ? '' : 's'}
+          </span>
+          <button
+            type="button"
+            onClick={criarGrupoECampanha}
+            disabled={criando}
+            className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none disabled:opacity-60"
+          >
+            {criando ? 'Criando grupo…' : 'Criar grupo e campanha'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSel(new Set())}
+            className="text-gray-600 hover:underline"
+          >
+            Limpar seleção
+          </button>
+        </div>
+      )}
+
       {dados === null ? (
         <p className="text-sm text-gray-500">carregando…</p>
       ) : total === 0 ? (
@@ -121,14 +184,27 @@ export default function ContatosListPage() {
         <>
           <p className="text-xs text-gray-500 mb-3">
             {total} contato{total === 1 ? '' : 's'} no total
-            {mostrando < total ? ` · mostrando os primeiros ${mostrando}` : ''}.
+            {mostrando < total ? ` · mostrando os primeiros ${mostrando}` : ''} · marque para criar um
+            grupo e enviar.
           </p>
           <ul className="space-y-2">
             {dados.itens.map((c) => (
-              <li key={c.id}>
+              <li
+                key={c.id}
+                className={`flex items-center gap-3 rounded-lg border bg-white p-3 text-sm ${
+                  sel.has(c.id) ? 'border-gray-900' : 'border-gray-200'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={sel.has(c.id)}
+                  onChange={() => alternar(c.id)}
+                  aria-label={`Selecionar ${c.nome ?? 'contato'}`}
+                  className="accent-gray-900 shrink-0 h-4 w-4"
+                />
                 <Link
                   href={`/contatos/${c.id}`}
-                  className="block rounded-lg border border-gray-200 bg-white p-3 text-sm hover:border-gray-400 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+                  className="flex-1 min-w-0 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none rounded"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
