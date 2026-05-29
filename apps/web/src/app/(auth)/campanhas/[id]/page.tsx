@@ -43,6 +43,15 @@ interface Analytics {
   porMotivoFalha: { motivo: string; total: number }[];
 }
 
+type PreviewMsg =
+  | { canal: 'EMAIL'; assunto: string; html: string }
+  | {
+      canal: 'WHATSAPP';
+      metaTemplateName: string | null;
+      metaLanguage: string | null;
+      variaveisAplicadas: Record<string, string>;
+    };
+
 const brl = (n: number | null | undefined) =>
   n == null || !isFinite(n) ? '—' : n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
@@ -55,6 +64,7 @@ export default function CampanhaDetalhePage() {
   const [campanha, setCampanha] = useState<Campanha | null>(null);
   const [templateNome, setTemplateNome] = useState<string | null>(null);
   const [segmentoNome, setSegmentoNome] = useState<string | null>(null);
+  const [mensagemPreview, setMensagemPreview] = useState<PreviewMsg | null>(null);
   const [conexaoAtiva, setConexaoAtiva] = useState<boolean | null>(null);
   const [estimativa, setEstimativa] = useState<Estimativa | null>(null);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
@@ -99,6 +109,13 @@ export default function CampanhaDetalhePage() {
           .catch(() => {});
         api<{ nome: string }>({ path: `/segmentos/${c.segmentoId}` })
           .then((s) => ativo && setSegmentoNome(s.nome))
+          .catch(() => {});
+        api<PreviewMsg>({
+          method: 'POST',
+          path: `/templates/${c.templateId}/preview`,
+          body: { variaveis: {} },
+        })
+          .then((p) => ativo && setMensagemPreview(p))
           .catch(() => {});
         verificarConexao(c.canal).then((v) => ativo && setConexaoAtiva(v));
       } catch (e) {
@@ -219,6 +236,44 @@ export default function CampanhaDetalhePage() {
           </Item>
         )}
       </div>
+
+      {mensagemPreview && (
+        <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
+          <h2 className="text-sm font-medium text-gray-900 mb-2">Prévia da mensagem</h2>
+          {mensagemPreview.canal === 'EMAIL' ? (
+            <div>
+              <div className="text-xs text-gray-600 mb-1">
+                Assunto: <strong>{mensagemPreview.assunto}</strong>
+              </div>
+              <iframe
+                title="Prévia do e-mail"
+                srcDoc={mensagemPreview.html}
+                sandbox=""
+                className="w-full h-64 rounded-md border border-gray-200 bg-white"
+              />
+            </div>
+          ) : (
+            <div className="text-sm text-gray-700">
+              <div>
+                Template Meta: <strong>{mensagemPreview.metaTemplateName ?? '—'}</strong>
+                {mensagemPreview.metaLanguage ? ` (${mensagemPreview.metaLanguage})` : ''}
+              </div>
+              {Object.keys(mensagemPreview.variaveisAplicadas ?? {}).length > 0 && (
+                <div className="mt-1 text-xs text-gray-600">
+                  Variáveis:{' '}
+                  {Object.entries(mensagemPreview.variaveisAplicadas)
+                    .map(([k, v]) => `${k}=${v}`)
+                    .join(', ')}
+                </div>
+              )}
+              <p className="mt-2 text-xs text-gray-500">
+                O texto do WhatsApp é o aprovado na Meta; aqui mostramos a referência e os exemplos das
+                variáveis.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {acaoMsg && (
         <p role="status" className="mt-4 text-sm text-green-800 bg-green-50 border border-green-200 rounded-md p-3">
