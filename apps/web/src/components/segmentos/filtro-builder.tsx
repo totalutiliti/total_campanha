@@ -8,6 +8,7 @@ import {
   ehGrupo,
   Grupo,
   Operador,
+  OperadorLabels,
   Operadores,
 } from './filtros-tipos';
 
@@ -200,7 +201,7 @@ function RenderCondicao({
       >
         {Operadores.map((op) => (
           <option key={op} value={op}>
-            {op}
+            {OperadorLabels[op]}
           </option>
         ))}
       </select>
