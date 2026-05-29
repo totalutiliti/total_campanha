@@ -34,12 +34,12 @@ export default function TemplatesListPage() {
   return (
     <div>
       <div className="flex items-center justify-between gap-4 mb-1 flex-wrap">
-        <h1 className="text-2xl font-semibold">Templates</h1>
+        <h1 className="text-2xl font-semibold">Mensagens</h1>
         <Link
           href="/templates/novo"
           className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
         >
-          Novo template
+          Nova mensagem
         </Link>
       </div>
       <p className="text-xs text-gray-500 mb-4">As mensagens que você dispara nas campanhas.</p>
@@ -52,7 +52,7 @@ export default function TemplatesListPage() {
         <p className="text-sm text-gray-500">carregando…</p>
       ) : itens.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-          <p className="text-sm font-medium text-gray-900">Nenhum template ainda.</p>
+          <p className="text-sm font-medium text-gray-900">Nenhuma mensagem ainda.</p>
           <p className="mt-1 text-sm text-gray-600">
             Crie a mensagem que você vai enviar nas campanhas (WhatsApp ou e-mail).
           </p>
@@ -60,7 +60,7 @@ export default function TemplatesListPage() {
             href="/templates/novo"
             className="mt-4 inline-block rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700"
           >
-            Novo template
+            Nova mensagem
           </Link>
         </div>
       ) : (

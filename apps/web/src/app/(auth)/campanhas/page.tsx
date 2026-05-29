@@ -55,7 +55,7 @@ export default function CampanhasListPage() {
         <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
           <p className="text-sm font-medium text-gray-900">Nenhuma campanha ainda.</p>
           <p className="mt-1 text-sm text-gray-600">
-            Uma campanha junta uma mensagem (template) com um grupo de contatos (segmento) e dispara.
+            Uma campanha junta uma mensagem com um grupo de contatos e dispara.
           </p>
           <Link
             href="/campanhas/nova"

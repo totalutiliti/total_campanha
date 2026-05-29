@@ -94,7 +94,7 @@ export default function EditarTemplatePage() {
   }
 
   async function excluir() {
-    if (!window.confirm('Excluir este template? Campanhas que já usaram ele não são afetadas.')) return;
+    if (!window.confirm('Excluir esta mensagem? Campanhas que já usaram ela não são afetadas.')) return;
     setErro(null);
     try {
       await api({ method: 'DELETE', path: `/templates/${id}` });
@@ -107,9 +107,9 @@ export default function EditarTemplatePage() {
   return (
     <div>
       <Link href="/templates" className="text-xs text-gray-600 hover:text-gray-900">
-        ← Voltar para templates
+        ← Voltar para mensagens
       </Link>
-      <h1 className="mt-2 mb-4 text-2xl font-semibold">Editar template</h1>
+      <h1 className="mt-2 mb-4 text-2xl font-semibold">Editar mensagem</h1>
 
       {carregando ? (
         <p className="text-sm text-gray-500">carregando…</p>
@@ -183,13 +183,13 @@ export default function EditarTemplatePage() {
           )}
 
           <div className="mt-10 max-w-2xl rounded-md border border-red-200 bg-red-50/40 p-4">
-            <h2 className="text-sm font-medium text-red-800">Excluir template</h2>
+            <h2 className="text-sm font-medium text-red-800">Excluir mensagem</h2>
             <button
               type="button"
               onClick={excluir}
               className="mt-2 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:outline-none"
             >
-              Excluir template
+              Excluir mensagem
             </button>
           </div>
         </>

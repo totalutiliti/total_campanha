@@ -54,11 +54,11 @@ export function GuardiaoAuth({ children }: { children: React.ReactNode }) {
               Contatos
             </Link>
             <Link href="/segmentos" className="hover:text-gray-900">
-              Segmentos
-            </Link>
+              Grupos
+</Link>
             <Link href="/templates" className="hover:text-gray-900">
-              Templates
-            </Link>
+              Mensagens
+</Link>
             <Link href="/conexoes" className="hover:text-gray-900">
               Conexões
             </Link>
