@@ -37,9 +37,9 @@ export default function NovoTemplatePage() {
   return (
     <div>
       <Link href="/templates" className="text-xs text-gray-600 hover:text-gray-900">
-        ← Voltar para templates
+        ← Voltar para mensagens
       </Link>
-      <h1 className="mt-2 mb-4 text-2xl font-semibold">Novo template</h1>
+      <h1 className="mt-2 mb-4 text-2xl font-semibold">Nova mensagem</h1>
 
       {!canal ? (
         <div>
@@ -83,7 +83,7 @@ export default function NovoTemplatePage() {
             canal={canal}
             salvando={salvando}
             erroServidor={erro}
-            textoBotao="Criar template"
+            textoBotao="Criar mensagem"
             onSalvar={salvar}
           />
         </>

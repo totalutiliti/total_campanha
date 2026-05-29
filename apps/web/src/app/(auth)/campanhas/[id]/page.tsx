@@ -226,10 +226,10 @@ export default function CampanhaDetalhePage() {
         <Item label="Canal">{canalLabel(campanha.canal)}</Item>
         <Item label="Mensagem">
           <Link href={`/templates/${campanha.templateId}`} className="text-gray-900 underline">
-            {templateNome ?? 'ver template'}
+            {templateNome ?? 'ver mensagem'}
           </Link>
         </Item>
-        <Item label="Segmento">{segmentoNome ?? '—'}</Item>
+        <Item label="Grupo">{segmentoNome ?? '—'}</Item>
         {campanha.agendadoPara && (
           <Item label="Agendada para">
             {new Date(campanha.agendadoPara).toLocaleString('pt-BR')}

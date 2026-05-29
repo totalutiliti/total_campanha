@@ -158,8 +158,8 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <Card href="/campanhas" titulo="Campanhas" descricao="Criar e disparar." />
           <Card href="/contatos" titulo="Contatos" descricao="Sua base de clientes." />
-          <Card href="/segmentos" titulo="Segmentos" descricao="Grupos para enviar." />
-          <Card href="/templates" titulo="Templates" descricao="Suas mensagens." />
+          <Card href="/segmentos" titulo="Grupos" descricao="Quem vai receber." />
+          <Card href="/templates" titulo="Mensagens" descricao="O que você envia." />
           <Card href="/conexoes" titulo="Conexões" descricao="WhatsApp e e-mail." />
         </div>
       </section>

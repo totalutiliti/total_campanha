@@ -73,7 +73,7 @@ export default function NovaCampanhaPage() {
     setErro(null);
     if (!nome.trim()) return setErro('Dê um nome para a campanha.');
     if (!templateId) return setErro('Escolha a mensagem (template) que será enviada.');
-    if (!segmentoId) return setErro('Escolha o segmento de contatos que vai receber.');
+    if (!segmentoId) return setErro('Escolha o grupo de contatos que vai receber.');
     if (agendar && !agendadoPara) return setErro('Informe a data e a hora do agendamento.');
 
     setSalvando(true);
@@ -126,12 +126,12 @@ export default function NovaCampanhaPage() {
         </fieldset>
 
         <label className="block">
-          <span className="text-sm font-medium text-gray-900">Mensagem (template)</span>
+          <span className="text-sm font-medium text-gray-900">Mensagem</span>
           {templates === null ? (
             <p className="mt-1 text-sm text-gray-500">carregando…</p>
           ) : templates.length === 0 ? (
             <p className="mt-1 text-sm text-gray-600">
-              Você ainda não tem template de {canalLabel(canal)}.{' '}
+              Você ainda não tem mensagem de {canalLabel(canal)}.{' '}
               <Link href="/templates/novo" className="text-gray-900 underline">
                 Criar um agora
               </Link>
@@ -154,12 +154,12 @@ export default function NovaCampanhaPage() {
         </label>
 
         <label className="block">
-          <span className="text-sm font-medium text-gray-900">Quem vai receber (segmento)</span>
+          <span className="text-sm font-medium text-gray-900">Quem vai receber (grupo)</span>
           {segmentos === null ? (
             <p className="mt-1 text-sm text-gray-500">carregando…</p>
           ) : segmentos.length === 0 ? (
             <p className="mt-1 text-sm text-gray-600">
-              Você ainda não tem segmentos.{' '}
+              Você ainda não tem grupos.{' '}
               <Link href="/segmentos/novo" className="text-gray-900 underline">
                 Criar um agora
               </Link>

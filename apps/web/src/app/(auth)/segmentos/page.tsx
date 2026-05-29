@@ -43,12 +43,12 @@ export default function SegmentosListPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Segmentos</h1>
+        <h1 className="text-2xl font-semibold">Grupos</h1>
         <Link
           href="/segmentos/novo"
           className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
         >
-          Novo segmento
+          Novo grupo
         </Link>
       </div>
       <p className="text-xs text-gray-500 mb-4">Grupos de contatos para mirar nas campanhas.</p>
@@ -63,16 +63,16 @@ export default function SegmentosListPage() {
         <p className="text-sm text-gray-500">carregando…</p>
       ) : itens.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-          <p className="text-sm font-medium text-gray-900">Nenhum segmento ainda.</p>
+          <p className="text-sm font-medium text-gray-900">Nenhum grupo ainda.</p>
           <p className="mt-1 text-sm text-gray-600">
-            Um segmento é um grupo de contatos (ex.: clientes com opt-in de WhatsApp) que você envia
-            de uma vez.
+            Um grupo reúne contatos (ex.: clientes com opt-in de WhatsApp) para você enviar de uma
+            vez.
           </p>
           <Link
             href="/segmentos/novo"
             className="mt-4 inline-block rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700"
           >
-            Novo segmento
+            Novo grupo
           </Link>
         </div>
       ) : (
