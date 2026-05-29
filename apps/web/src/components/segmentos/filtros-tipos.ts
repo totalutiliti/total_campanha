@@ -22,6 +22,22 @@ export const Operadores = [
 ] as const;
 export type Operador = (typeof Operadores)[number];
 
+/** Rótulos em português para exibição (o valor enviado ao backend é a chave). */
+export const OperadorLabels: Record<Operador, string> = {
+  equals: 'é igual a',
+  not_equals: 'é diferente de',
+  contains: 'contém',
+  not_contains: 'não contém',
+  gt: 'maior que',
+  lt: 'menor que',
+  gte: 'maior ou igual a',
+  lte: 'menor ou igual a',
+  in: 'está na lista',
+  not_in: 'não está na lista',
+  has_opt_in_email: 'tem opt-in de e-mail',
+  has_opt_in_whatsapp: 'tem opt-in de WhatsApp',
+};
+
 export const CamposPermitidos = [
   'nome',
   'email',

@@ -35,10 +35,10 @@ export default function NovoSegmentoPage() {
 
   return (
     <form onSubmit={salvar} className="space-y-4">
-      <h1 className="text-2xl font-semibold">Novo segmento</h1>
+      <h1 className="text-2xl font-semibold">Novo grupo</h1>
 
       <label className="block">
-        <span className="text-sm font-medium">Nome do segmento</span>
+        <span className="text-sm font-medium">Nome do grupo</span>
         <input
           value={nome}
           onChange={(e) => setNome(e.target.value)}
@@ -66,7 +66,7 @@ export default function NovoSegmentoPage() {
           disabled={enviando || !nome.trim()}
           className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-60"
         >
-          {enviando ? 'Salvando…' : 'Salvar segmento'}
+          {enviando ? 'Salvando…' : 'Salvar grupo'}
         </button>
         <button
           type="button"

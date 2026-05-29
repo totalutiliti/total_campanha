@@ -15,6 +15,7 @@ import { Condicao, ehGrupo, Grupo } from './filtros-schema.js';
  * impedir que um usuário aponte para `passwordHash` ou similar acidentalmente.
  */
 const CAMPOS_PERMITIDOS = new Set([
+  'id',
   'nome',
   'email',
   'telefoneE164',
