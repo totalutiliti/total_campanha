@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { useAuth } from '../../../lib/auth/context';
+import { baixarModeloXlsx } from '../../../lib/csv/xlsx';
 import { mensagemErro } from '../../../lib/erro';
 
 interface Contato {
@@ -100,6 +101,16 @@ export default function ContatosListPage() {
       <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
         <h1 className="text-2xl font-semibold">Contatos</h1>
         <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() =>
+              baixarModeloXlsx().catch(() => setErro('Não foi possível gerar o modelo. Tente de novo.'))
+            }
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+            title="Baixa uma planilha Excel no formato certo para preencher e importar"
+          >
+            Baixar modelo
+          </button>
           <Link
             href="/contatos/importar"
             className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"

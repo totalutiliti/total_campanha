@@ -13,7 +13,7 @@ import {
   ValidacaoLocal,
 } from '../../../../lib/csv/mapeamento';
 import { CsvParseado, gerarCsv, parsearCsv } from '../../../../lib/csv/parser';
-import { baixarTemplate } from '../../../../lib/csv/template';
+import { baixarModeloXlsx, parsearXlsx } from '../../../../lib/csv/xlsx';
 
 /**
  * Importação de contatos via CSV — UX-14 (Fase 1).
@@ -75,11 +75,14 @@ export default function ImportarContatosPage() {
   const [etapa, setEtapa] = useState<Etapa>({ tipo: 'upload' });
 
   async function aoEscolherArquivo(arquivo: File): Promise<void> {
-    if (!arquivo.name.toLowerCase().endsWith('.csv')) {
+    const nomeArq = arquivo.name.toLowerCase();
+    const ehXlsx = nomeArq.endsWith('.xlsx');
+    const ehCsv = nomeArq.endsWith('.csv');
+    if (!ehXlsx && !ehCsv) {
       setEtapa({
         tipo: 'erro',
         mensagem:
-          'Por enquanto só aceitamos .csv. Se está com Excel, abra-o, vá em "Salvar como" e escolha CSV (UTF-8).',
+          'Formato não suportado. Envie .xlsx (Excel) ou .csv — baixe o modelo na tela de Contatos para começar no formato certo.',
         podeVoltar: true,
       });
       return;
@@ -93,8 +96,7 @@ export default function ImportarContatosPage() {
       return;
     }
     try {
-      const texto = await arquivo.text();
-      const csv = parsearCsv(texto);
+      const csv = ehXlsx ? await parsearXlsx(arquivo) : parsearCsv(await arquivo.text());
       if (csv.cabecalhos.length === 0) {
         setEtapa({
           tipo: 'erro',
@@ -279,15 +281,17 @@ function EtapaUpload({ aoEscolher }: { aoEscolher: (f: File) => void }) {
       <div className="rounded-md border border-gray-200 bg-white p-4 text-sm">
         <p className="font-medium text-gray-900">Primeira vez importando?</p>
         <p className="text-gray-700 mt-1">
-          Baixe nosso modelo CSV preenchido com 3 exemplos. Use-o como
+          Baixe nosso modelo em Excel preenchido com 3 exemplos. Use-o como
           referência das colunas que esperamos.
         </p>
         <button
           type="button"
-          onClick={() => baixarTemplate()}
+          onClick={() => {
+            baixarModeloXlsx().catch(() => {});
+          }}
           className="mt-3 inline-flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-900 hover:border-gray-900 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
         >
-          Baixar modelo CSV
+          Baixar modelo (Excel)
         </button>
       </div>
 
@@ -311,11 +315,11 @@ function EtapaUpload({ aoEscolher }: { aoEscolher: (f: File) => void }) {
           Arraste o arquivo aqui ou clique para escolher
         </p>
         <p className="mt-1 text-xs text-gray-600">
-          .csv UTF-8, até 10 MB. Salvou seu Excel como CSV? Funciona.
+          Aceita .xlsx (Excel) e .csv, até 10 MB.
         </p>
         <input
           type="file"
-          accept=".csv,text/csv"
+          accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           className="sr-only"
           onChange={(e) => {
             const arq = e.currentTarget.files?.[0];
