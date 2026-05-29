@@ -14,7 +14,7 @@
  * para o usuário entender, na primeira leitura, o que cada coluna espera.
  */
 
-const CABECALHOS = [
+export const CABECALHOS = [
   'nome',
   'email',
   'telefone',
@@ -24,7 +24,7 @@ const CABECALHOS = [
   'regiao',
 ];
 
-const LINHAS_EXEMPLO: string[][] = [
+export const LINHAS_EXEMPLO: string[][] = [
   [
     'ARMAC LOCACAO LOGISTICA E SERVICOS S.A',
     'mariana.abreu@armac.com.br',
