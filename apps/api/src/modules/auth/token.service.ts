@@ -15,6 +15,8 @@ import type {
 const REFRESH_PREFIX = 'tc:auth:refresh:';        // tc:auth:refresh:{jti} → { fam, sub }
 const REFRESH_FAMILY_PREFIX = 'tc:auth:fam:';     // tc:auth:fam:{fam}     → '1' (válida) | '0' (invalidada)
 const RESET_PREFIX = 'tc:auth:reset:';            // tc:auth:reset:{token} → userId
+const REFRESH_GRACE_PREFIX = 'tc:auth:grace:';    // tc:auth:grace:{jti} → token sucessor (TTL curto)
+const REFRESH_GRACE_SEC = 30;                     // janela de tolerância p/ corridas de refresh concorrentes
 
 @Injectable()
 export class TokenService {
@@ -121,16 +123,40 @@ export class TokenService {
     }
 
     const jtiKey = `${REFRESH_PREFIX}${payload.jti}`;
+    const graceKey = `${REFRESH_GRACE_PREFIX}${payload.jti}`;
     const stored = await this.redis.client.get(jtiKey);
     if (!stored) {
-      // Reuse detectado: invalida a família inteira.
+      // jti já consumido. Pode ser (a) corrida concorrente legítima — várias
+      // chamadas com o mesmo token quase ao mesmo tempo (boot com StrictMode,
+      // múltiplas abas) — ou (b) reuso de token roubado. Distinguimos pela
+      // janela de carência: se a rotação anterior gravou o token sucessor há
+      // poucos segundos, devolvemos esse mesmo token (idempotente) em vez de
+      // derrubar a sessão inteira.
+      const grace = await this.redis.client.get(graceKey);
+      if (grace) {
+        return JSON.parse(grace) as {
+          token: string;
+          jti: string;
+          family: string;
+          sub: string;
+          tid: string | null;
+        };
+      }
+      // Reuso real (fora da janela de carência): invalida a família inteira.
       await this.redis.client.set(famKey, '0', 'EX', this.refreshTtlSec);
       throw new UnauthorizedException('Refresh token reutilizado.');
     }
-    await this.redis.client.del(jtiKey);
 
     const novo = await this.emitirRefreshToken(payload.sub, payload.tid ?? null, payload.fam);
-    return { ...novo, sub: payload.sub, tid: payload.tid ?? null };
+    const sucessor = { ...novo, sub: payload.sub, tid: payload.tid ?? null };
+
+    // Grava a carência ANTES de deletar o jti: assim, uma chamada concorrente
+    // que chegue logo após a deleção encontra o sucessor e não dispara o alarme
+    // de reuso (a detecção de reuso real continua valendo após o TTL da carência).
+    await this.redis.client.set(graceKey, JSON.stringify(sucessor), 'EX', REFRESH_GRACE_SEC);
+    await this.redis.client.del(jtiKey);
+
+    return sucessor;
   }
 
   async invalidarFamilia(family: string): Promise<void> {
