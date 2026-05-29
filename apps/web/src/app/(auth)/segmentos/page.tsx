@@ -17,6 +17,7 @@ export default function SegmentosListPage() {
   const [itens, setItens] = useState<SegmentoItem[] | null>(null);
   const [contagens, setContagens] = useState<Record<string, number>>({});
   const [erro, setErro] = useState<string | null>(null);
+  const [excluindo, setExcluindo] = useState<string | null>(null);
 
   useEffect(() => {
     let ativo = true;
@@ -25,7 +26,7 @@ export default function SegmentosListPage() {
         const lista = await api<SegmentoItem[]>({ path: '/segmentos' });
         if (!ativo) return;
         setItens(lista);
-        // Contagem de contatos por segmento (best-effort, em paralelo).
+        // Contagem de contatos por grupo (best-effort, em paralelo).
         lista.forEach((s) => {
           api<{ total: number }>({ path: `/segmentos/${s.id}/contatos/contagem` })
             .then((r) => ativo && setContagens((c) => ({ ...c, [s.id]: r.total })))
@@ -39,6 +40,26 @@ export default function SegmentosListPage() {
       ativo = false;
     };
   }, [api]);
+
+  async function excluir(id: string, nome: string) {
+    if (
+      !window.confirm(
+        `Excluir o grupo "${nome}"? As campanhas que já usaram ele não são afetadas.`,
+      )
+    ) {
+      return;
+    }
+    setExcluindo(id);
+    setErro(null);
+    try {
+      await api({ method: 'DELETE', path: `/segmentos/${id}` });
+      setItens((atual) => (atual ? atual.filter((s) => s.id !== id) : atual));
+    } catch (e) {
+      setErro(mensagemErro(e));
+    } finally {
+      setExcluindo(null);
+    }
+  }
 
   return (
     <div>
@@ -88,10 +109,20 @@ export default function SegmentosListPage() {
                   Criado em {new Date(s.createdAt).toLocaleDateString('pt-BR')}
                 </div>
               </div>
-              <div className="text-xs text-gray-600 shrink-0 tabular-nums">
-                {s.id in contagens
-                  ? `${contagens[s.id]} contato${contagens[s.id] === 1 ? '' : 's'}`
-                  : '…'}
+              <div className="flex items-center gap-4 shrink-0">
+                <span className="text-xs text-gray-600 tabular-nums">
+                  {s.id in contagens
+                    ? `${contagens[s.id]} contato${contagens[s.id] === 1 ? '' : 's'}`
+                    : '…'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => excluir(s.id, s.nome)}
+                  disabled={excluindo === s.id}
+                  className="text-xs text-red-700 hover:underline focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:outline-none rounded disabled:opacity-60"
+                >
+                  {excluindo === s.id ? 'excluindo…' : 'Excluir'}
+                </button>
               </div>
             </li>
           ))}
