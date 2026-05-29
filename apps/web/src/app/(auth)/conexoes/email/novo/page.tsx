@@ -59,8 +59,8 @@ export default function NovaConexaoEmailPage() {
     return (
       <div className="space-y-4">
         <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-900">
-          Identidade criada. Configure estes registros DNS no seu provedor (Registro.br, Cloudflare,
-          etc). A verificação pode levar de minutos a algumas horas.
+          E-mail cadastrado. Configure estes registros no seu provedor de domínio (Registro.br,
+          Cloudflare, etc). A verificação pode levar de minutos a algumas horas.
         </div>
 
         <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden">
@@ -105,7 +105,12 @@ export default function NovaConexaoEmailPage() {
 
   return (
     <form onSubmit={aoSubmeter} className="space-y-4 max-w-md">
-      <h1 className="text-2xl font-semibold">Conectar domínio de email</h1>
+      <h1 className="text-2xl font-semibold">Conectar e-mail</h1>
+      <p className="text-sm text-gray-600">
+        Para enviar campanhas por e-mail você usa um domínio próprio (o que vem depois do @).
+        Informe o domínio e o remetente; na etapa seguinte mostramos os registros para liberar
+        o envio junto ao seu provedor de domínio.
+      </p>
 
       <label className="block">
         <span className="text-sm font-medium">Domínio de envio</span>
@@ -141,7 +146,7 @@ export default function NovaConexaoEmailPage() {
         disabled={enviando}
         className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-60"
       >
-        {enviando ? 'Criando…' : 'Criar identidade no SES'}
+        {enviando ? 'Conectando…' : 'Conectar e-mail'}
       </button>
     </form>
   );
