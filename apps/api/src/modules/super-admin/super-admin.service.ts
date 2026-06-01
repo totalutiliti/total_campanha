@@ -1,5 +1,8 @@
+import { randomBytes } from 'node:crypto';
+
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -54,6 +57,73 @@ export class SuperAdminService {
   // -------------------------------------------------------------------------
   // Tenants
   // -------------------------------------------------------------------------
+
+  /**
+   * Cria um tenant + primeiro usuário ADMIN (provisionamento pelo operador).
+   * Gera uma senha temporária — devolvida UMA vez para o Super Admin repassar;
+   * o cliente troca no primeiro acesso (fluxo "esqueci a senha").
+   */
+  async criarTenant(
+    superAdminId: string,
+    dto: {
+      slug: string;
+      cnpj: string;
+      razaoSocial: string;
+      emailAdmin: string;
+      plano?: 'STARTER' | 'PRO' | 'ENTERPRISE';
+    },
+  ) {
+    const emailHash = this.emailHash.hash(dto.emailAdmin);
+    const [emailExistente, slugExistente, cnpjExistente] = await Promise.all([
+      this.prisma.user.findUnique({ where: { emailHash } }),
+      this.prisma.tenant.findUnique({ where: { slug: dto.slug } }),
+      this.prisma.tenant.findUnique({ where: { cnpj: dto.cnpj } }),
+    ]);
+    if (emailExistente) throw new ConflictException('E-mail já cadastrado.');
+    if (slugExistente) throw new ConflictException('Identificador (slug) já em uso.');
+    if (cnpjExistente) throw new ConflictException('CNPJ já cadastrado.');
+
+    // Senha temporária forte (96 bits). Não é persistida em texto puro — só o
+    // hash Argon2id fica no banco; o texto é devolvido uma única vez.
+    const senhaTemporaria = randomBytes(12).toString('base64url');
+    const passwordHash = await this.password.hash(senhaTemporaria);
+
+    const tenant = await this.prisma.tenant.create({
+      data: {
+        slug: dto.slug,
+        cnpj: dto.cnpj,
+        razaoSocial: dto.razaoSocial,
+        plano: dto.plano ?? 'STARTER',
+        status: 'TRIAL',
+        trialAteEm: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+        userTenants: {
+          create: {
+            role: Role.ADMIN,
+            user: { create: { email: dto.emailAdmin, emailHash, passwordHash } },
+          },
+        },
+      },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        tenantId: tenant.id,
+        userId: superAdminId,
+        acao: 'superadmin.tenant.criar',
+        recurso: tenant.id,
+        dados: { slug: dto.slug, cnpj: dto.cnpj, emailAdmin: dto.emailAdmin, plano: tenant.plano },
+      },
+    });
+
+    return {
+      id: tenant.id,
+      slug: tenant.slug,
+      razaoSocial: tenant.razaoSocial,
+      emailAdmin: dto.emailAdmin,
+      senhaTemporaria,
+    };
+  }
+
   async listarTenants() {
     const tenants = await this.prisma.tenant.findMany({
       orderBy: { createdAt: 'desc' },
