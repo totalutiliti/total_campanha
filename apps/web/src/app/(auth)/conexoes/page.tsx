@@ -51,7 +51,7 @@ export default function ConexoesPage() {
 
       <section>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-medium">WhatsApp (BYOA)</h2>
+          <h2 className="text-lg font-medium">WhatsApp</h2>
           {wa === 'sem' && (
             <Link
               href="/conexoes/whatsapp/novo"
@@ -64,7 +64,10 @@ export default function ConexoesPage() {
         {wa === null ? (
           <p className="text-sm text-gray-500">carregando…</p>
         ) : wa === 'sem' ? (
-          <p className="text-sm text-gray-500">Nenhuma conexão WhatsApp ativa.</p>
+          <p className="text-sm text-gray-500">
+            Ainda sem WhatsApp conectado. Conecte a conta WhatsApp Business da sua empresa para
+            disparar campanhas por WhatsApp.
+          </p>
         ) : (
           <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
             <div className="grid grid-cols-2 gap-2">
@@ -79,18 +82,21 @@ export default function ConexoesPage() {
 
       <section>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-lg font-medium">Email (domínios)</h2>
+          <h2 className="text-lg font-medium">E-mail</h2>
           <Link
             href="/conexoes/email/novo"
             className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium"
           >
-            Conectar domínio
+            Conectar e-mail
           </Link>
         </div>
         {emails === null ? (
           <p className="text-sm text-gray-500">carregando…</p>
         ) : emails.length === 0 ? (
-          <p className="text-sm text-gray-500">Nenhum domínio configurado.</p>
+          <p className="text-sm text-gray-500">
+            Ainda sem e-mail conectado. Conecte o domínio do seu e-mail para disparar campanhas
+            por e-mail.
+          </p>
         ) : (
           <ul className="space-y-2">
             {emails.map((c) => (

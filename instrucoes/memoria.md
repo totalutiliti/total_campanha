@@ -10,6 +10,41 @@
 
 ---
 
+## 2026-06-01 — Frontend Super Admin + criação de tenant pelo painel
+
+**Categoria:** Frontend / Super Admin
+
+Construído o **painel Super Admin** no `apps/web` (`/admin/*`). Antes só existia a
+API `/admin/*`; o frontend era débito conhecido (este arquivo o listava como
+pendente em "frontend de campanhas/billing/super-admin").
+
+- **Escopo isolado** em `app/admin/`, separado do app do tenant. `lib/admin/context.tsx`
+  tem sessão própria: login `POST /admin/auth/login`, token `aud='super-admin'` em
+  memória + `sessionStorage`. Não há refresh nesse escopo (token de 15 min); em
+  401/expiração a sessão encerra e manda para `/admin/login`. Helpers em
+  `lib/admin/format.ts` e `lib/admin/ui.tsx`.
+- **Telas:** `/admin/login`, visão geral `/admin` (custos + contagem de tenants),
+  `/admin/tenants`, detalhe `/admin/tenants/[id]` (métricas + suspender + impersonar),
+  `/admin/custos`, `/admin/auditoria`. Header escuro distinto do app do tenant.
+- **Impersonação:** "Entrar como cliente" grava token em `sessionStorage` (`tc:impersonate`);
+  o `AuthProvider` do tenant lê no boot de forma **aditiva** (só ativa com token válido —
+  zero efeito no fluxo normal) e mostra banner âmbar "vendo como X" + "Sair da visão".
+- **Criação de tenant pelo painel** (antes o superadmin NÃO criava tenant): novo
+  `POST /admin/tenants` (`SuperAdminGuard`) → `SuperAdminService.criarTenant` reaproveita o
+  caminho do signup (Tenant `TRIAL` + 1º user `ADMIN`), **gera senha temporária** devolvida
+  uma única vez (só o hash Argon2id fica no banco), audita `superadmin.tenant.criar`. Form em
+  `/admin/tenants/novo` com slug auto-sugerido. Tenants criados herdam RLS/RBAC
+  automaticamente (a proteção é por tabela, não por tenant).
+- **Acesso:** superadmin não está no seed (por design, RULES 1.6). Criar/definir senha via
+  `pnpm --filter @total-campanha/db criar-super-admin` (SA_EMAIL/SA_PASSWORD) e entrar em
+  `/admin/login`.
+- **Limitação herdada:** a criação pelo operador não captura aceite de DPA (o signup público
+  captura) — forçar no 1º acesso é follow-up. Não há envio de e-mail ao novo admin (o operador
+  repassa a senha temporária).
+- **Verificação:** typecheck + lint (web) e `nest build` (api) limpos; fluxo testado no Chrome
+  com superadmin descartável de dev (login, todas as telas, suspender + restauração, impersonar +
+  sair da visão, criar tenant + login do novo admin retornando 200). Dados de teste removidos.
+
 ## 2026-05-22 — Blindagem mergeada, CI verde, deploys manual-only
 
 **Categoria:** Bootstrap / CI
