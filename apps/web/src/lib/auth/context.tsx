@@ -3,6 +3,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { apiFetch, baseUrl, chamarRefresh, ApiRequest } from './api-client';
+import { decodeJwt } from './jwt';
 
 export type Role = 'ADMIN' | 'EDITOR_CAMPANHA' | 'VISUALIZADOR';
 
@@ -29,7 +30,13 @@ type Estado =
   | { tipo: 'carregando' }
   | { tipo: 'anonimo' }
   | { tipo: 'precisa-escolher-tenant'; accessToken: string; tenants: TenantInfo[] }
-  | { tipo: 'autenticado'; accessToken: string; me: MeResponse };
+  | {
+      tipo: 'autenticado';
+      accessToken: string;
+      me: MeResponse;
+      /** Presente quando o Super Admin está vendo a plataforma como este tenant. */
+      impersonando?: { nome: string };
+    };
 
 interface ContextoAuth {
   estado: Estado;
@@ -66,6 +73,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelado = false;
     (async () => {
       try {
+        // Modo impersonação (Super Admin): se há um token de impersonate válido,
+        // usa-o e pula o refresh normal do tenant.
+        const tokenImp = lerTokenImpersonacao();
+        if (tokenImp) {
+          tokenRef.current = tokenImp.token;
+          const meImp = await fetchMe(tokenImp.token);
+          if (cancelado) return;
+          setEstado({
+            tipo: 'autenticado',
+            accessToken: tokenImp.token,
+            me: meImp,
+            impersonando: { nome: tokenImp.nome ?? meImp.tenantAtual?.razaoSocial ?? 'cliente' },
+          });
+          return;
+        }
+
         let accessToken: string;
         try {
           accessToken = await chamarRefresh();
@@ -209,6 +232,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // silencioso
     }
+    try {
+      sessionStorage.removeItem(IMPERSONATE_KEY);
+    } catch {
+      // ignora
+    }
     tokenRef.current = null;
     setEstado({ tipo: 'anonimo' });
   }, []);
@@ -219,6 +247,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
+}
+
+/** Chave compartilhada com o painel Super Admin para iniciar impersonação. */
+const IMPERSONATE_KEY = 'tc:impersonate';
+
+/**
+ * Lê e valida o token de impersonação do sessionStorage (escrito pelo painel
+ * /admin ao "Entrar como cliente"). Retorna null e limpa a chave se ausente,
+ * malformado, de audiência errada ou expirado.
+ */
+function lerTokenImpersonacao(): { token: string; nome?: string } | null {
+  try {
+    const cru = sessionStorage.getItem(IMPERSONATE_KEY);
+    if (!cru) return null;
+    const imp = JSON.parse(cru) as { token?: string; tenantNome?: string };
+    const payload = imp.token ? decodeJwt(imp.token) : null;
+    if (!imp.token || !payload || payload.aud !== 'tenant' || payload.exp * 1000 <= Date.now()) {
+      sessionStorage.removeItem(IMPERSONATE_KEY);
+      return null;
+    }
+    return { token: imp.token, nome: imp.tenantNome };
+  } catch {
+    try {
+      sessionStorage.removeItem(IMPERSONATE_KEY);
+    } catch {
+      // ignora
+    }
+    return null;
+  }
 }
 
 async function fetchMe(accessToken: string): Promise<MeResponse> {

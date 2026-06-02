@@ -16,6 +16,7 @@ import { CurrentUser } from '../auth/current-user.decorator.js';
 import { Public } from '../auth/public.decorator.js';
 import type { AuthenticatedUser } from '../auth/jwt-payload.type.js';
 
+import { CriarTenantDto } from './dto/criar-tenant.dto.js';
 import { LoginSuperAdminDto } from './dto/login-super-admin.dto.js';
 import { SuperAdminGuard } from './super-admin.guard.js';
 import { SuperAdminService } from './super-admin.service.js';
@@ -37,6 +38,13 @@ export class SuperAdminController {
   @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   login(@Body() dto: LoginSuperAdminDto) {
     return this.service.login(dto.email, dto.senha);
+  }
+
+  @Post('tenants')
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(SuperAdminGuard)
+  criarTenant(@CurrentUser() admin: AuthenticatedUser, @Body() dto: CriarTenantDto) {
+    return this.service.criarTenant(admin.sub, dto);
   }
 
   @Get('tenants')
