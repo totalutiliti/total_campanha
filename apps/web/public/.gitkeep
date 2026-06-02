@@ -1,0 +1,2 @@
+# Mantém apps/web/public versionado mesmo vazio.
+# O Dockerfile do web faz COPY desta pasta no estágio de runtime; sem ela o build falha.

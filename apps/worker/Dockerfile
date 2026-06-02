@@ -22,16 +22,18 @@ FROM deps AS build
 COPY tsconfig.base.json turbo.json ./
 COPY packages ./packages
 COPY apps/worker ./apps/worker
+# OpenSSL: sem ele o Prisma não detecta a versão e cai no engine openssl-1.1
+# (libssl.so.1.1 não existe no Alpine 3 / node:20-alpine, que tem OpenSSL 3).
+RUN apk add --no-cache openssl
 RUN pnpm --filter @total-campanha/db generate
+RUN pnpm --filter @total-campanha/db build
 RUN pnpm --filter @total-campanha/shared build
 RUN pnpm --filter @total-campanha/worker build
-RUN pnpm --filter @total-campanha/worker... --prod deploy /app/deploy-worker
-
-FROM base AS runtime
+# ---------- runtime ----------
+# Usa o estágio de build como runtime (garante o Prisma Client gerado). Imagem
+# maior, aceitável para dev/POC. TODO PROD: enxugar com deploy --prod + regenerar.
+FROM build AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
-COPY --from=build /app/deploy-worker/node_modules ./node_modules
-COPY --from=build /app/apps/worker/dist ./dist
-COPY --from=build /app/packages/db/prisma ./packages/db/prisma
 # Worker não expõe HTTP — sem EXPOSE/HEALTHCHECK de porta.
-CMD ["node", "dist/main.js"]
+CMD ["node", "apps/worker/dist/main.js"]
