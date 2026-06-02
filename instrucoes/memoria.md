@@ -10,6 +10,38 @@
 
 ---
 
+## 2026-06-02 — Deploy DEV no Azure (scale-to-zero, custo mínimo)
+
+**Categoria:** Infra / Deploy
+
+Primeiro deploy real do app no Azure — ambiente **dev/POC** seguindo o padrão dos
+projetos irmãos (`rg-kegsafe-dev`): ACR Basic + Postgres Flexible Burstable +
+Container Apps Consumption, **sem** VNet/PE/Key Vault (isso é só PROD). Runbook
+completo em `infra/dev/README.md`. Segredos em `../.azure-dev-secrets.env` (fora do repo).
+
+- **No ar:** web `https://tc-web-dev.<dom>`, api `.../api/v1`, painel `/admin`.
+  `<dom>` = `yellowbeach-5d39f3f8.brazilsouth.azurecontainerapps.io`. Login tenant
+  `admin@cardanstencar.dev`/`admin123`; super admin `joao@totalutiliti.com.br`.
+- **Scale-to-zero** em api/web (compute ~US$0 ocioso; cold start ~20-40s na 1ª req).
+  **Redis ficou min=1** — a API conecta no boot e o cold-start do Redis derrubava a
+  ativação. Custo ≈ **US$31/mês** (ACR $5 + PG B1ms $13 + Redis $13). Reduzir: parar
+  o Postgres entre demos e/ou Redis min=0.
+- **DB:** `migrate deploy` como `tcadmin` (no Flexible Server o admin TEM `bypassrls`+`createrole`,
+  então a migration `0002_enable_rls` roda inteira); papéis `app_user`/`migration_user`
+  com senha + grants; `seed` + `criar-super-admin` com o mesmo `AUTH_PEPPER` dos apps;
+  `azure.extensions=PGCRYPTO,UUID-OSSP`.
+- **5 bugs de Dockerfile corrigidos** (valiam p/ PROD também): faltava `pnpm --filter
+  @total-campanha/db build`; `deploy --prod` com filtro `...` (3 projetos); Prisma
+  Client sumia no `deploy --prod` (runtime passou a usar o estágio de build); faltava
+  `apk add openssl` (Alpine 3/OpenSSL 3 vs engine openssl-1.1); `apps/web/public/.gitkeep`.
+- **Build:** `az acr build` quebra no cliente Windows (UnicodeEncodeError do colorama
+  ao transmitir o log do pnpm) → **build local com Docker + push** (tag `:dev`).
+  Contexto via `git archive HEAD` (sem `node_modules`/symlinks que travavam o tar).
+- **Ressalva:** cookie de refresh cross-site (SameSite=None) entre api e web em domínios
+  diferentes — sessão pode cair em ~15min se o navegador bloquear cookie de terceiro.
+  Aceitável p/ POC; em PROD usar domínio próprio (`api.<dominio>` + `app.<dominio>`).
+- Deploy automático em push na `main` segue **desabilitado** (PROD Azure não provisionado).
+
 ## 2026-06-01 — Frontend Super Admin + criação de tenant pelo painel
 
 **Categoria:** Frontend / Super Admin
