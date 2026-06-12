@@ -18,11 +18,15 @@ $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 Set-Location $repo
 
 # 1) Contexto limpo a partir do HEAD do git (commite antes de deployar!).
+# NOTA: nada de `git archive | tar` — pipe do PowerShell corrompe binário.
 $ctx = Join-Path $env:TEMP "tc-deploy-ctx-$Suffix"
 if (Test-Path $ctx) { Remove-Item -Recurse -Force $ctx }
 New-Item -ItemType Directory -Path $ctx | Out-Null
 Write-Host "== Gerando contexto de build em $ctx (git archive HEAD)"
-git archive HEAD | tar -x -C $ctx
+$tarFile = Join-Path $env:TEMP "tc-deploy-ctx-$Suffix.tar"
+git archive HEAD -o $tarFile
+tar -xf $tarFile -C $ctx
+Remove-Item $tarFile
 
 # 2) Login no ACR.
 az acr login -n $REG | Out-Null
