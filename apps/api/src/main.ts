@@ -9,8 +9,8 @@ import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
 
 import { AppModule } from './app.module.js';
-import { env } from './config/config.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { env } from './config/config.module.js';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });

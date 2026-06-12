@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { useAdminAuth } from '../../../lib/admin/context';
 import { brl } from '../../../lib/admin/format';
 import { EstatCartao, MensagemErro } from '../../../lib/admin/ui';
+import { mensagemErro } from '../../../lib/erro';
 
 interface Usage {
   hojeBrl: number;
@@ -36,7 +37,7 @@ export default function AdminHome() {
         setUsage(u);
         setTenants(t);
       } catch (e) {
-        if (ativo) setErro(e instanceof Error ? e.message : 'Falha ao carregar.');
+        if (ativo) setErro(mensagemErro(e, 'Falha ao carregar.'));
       }
     })();
     return () => {
@@ -51,35 +52,35 @@ export default function AdminHome() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-semibold">Visão geral</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Visão geral</h1>
 
       {erro && <MensagemErro>{erro}</MensagemErro>}
 
       <section>
-        <h2 className="text-sm font-medium text-gray-500 mb-2">Custos da plataforma</h2>
+        <h2 className="text-sm font-medium text-muted-foreground mb-2">Custos da plataforma</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <EstatCartao titulo="Hoje" valor={usage ? brl(usage.hojeBrl) : '…'} />
           <EstatCartao titulo="Últimos 7 dias" valor={usage ? brl(usage.semanaBrl) : '…'} />
           <EstatCartao titulo="Mês atual" valor={usage ? brl(usage.mesBrl) : '…'} />
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-muted-foreground">
           Custo estimado das chamadas a serviços externos (WhatsApp, e-mail).{' '}
-          <Link href="/admin/custos" className="underline hover:text-gray-700">
+          <Link href="/admin/custos" className="font-medium text-primary hover:underline">
             Ver detalhe por tenant →
           </Link>
         </p>
       </section>
 
       <section>
-        <h2 className="text-sm font-medium text-gray-500 mb-2">Tenants</h2>
+        <h2 className="text-sm font-medium text-muted-foreground mb-2">Tenants</h2>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <EstatCartao titulo="Total" valor={tenants ? total : '…'} />
           <EstatCartao titulo="Ativos" valor={tenants ? ativos : '…'} />
           <EstatCartao titulo="Em teste" valor={tenants ? trial : '…'} />
           <EstatCartao titulo="Suspensos" valor={tenants ? suspensos : '…'} />
         </div>
-        <p className="mt-2 text-xs text-gray-500">
-          <Link href="/admin/tenants" className="underline hover:text-gray-700">
+        <p className="mt-2 text-xs text-muted-foreground">
+          <Link href="/admin/tenants" className="font-medium text-primary hover:underline">
             Gerenciar tenants →
           </Link>
         </p>

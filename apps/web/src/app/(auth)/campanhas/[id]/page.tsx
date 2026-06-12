@@ -1,11 +1,17 @@
 'use client';
 
+import { ArrowLeft, Loader2, Pause, Play, Send, Trash2, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { AlertAviso, AlertErro, AlertSucesso } from '../../../../components/ui/alerts';
+import { Badge } from '../../../../components/ui/badge';
+import { Button } from '../../../../components/ui/button';
+import { Dialog, DialogFooter, DialogHeader } from '../../../../components/ui/dialog';
 import { useAuth } from '../../../../lib/auth/context';
 import { canalLabel, statusCampanha } from '../../../../lib/campanha-status';
+import { cn } from '../../../../lib/cn';
 import { mensagemErro } from '../../../../lib/erro';
 
 interface Campanha {
@@ -73,6 +79,8 @@ export default function CampanhaDetalhePage() {
   const [acaoErro, setAcaoErro] = useState<string | null>(null);
   const [acaoMsg, setAcaoMsg] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
+  // Dialog de confirmação (substitui window.confirm — mesmo efeito, só apresentação).
+  const [confirmando, setConfirmando] = useState<'cancelar' | 'excluir' | null>(null);
 
   async function buscarCampanhaEStatus(): Promise<Campanha> {
     const c = await api<Campanha>({ path: `/campanhas/${id}` });
@@ -152,9 +160,6 @@ export default function CampanhaDetalhePage() {
   }
 
   async function acao(caminho: 'disparar' | 'pausar' | 'cancelar') {
-    if (caminho === 'cancelar' && !window.confirm('Cancelar esta campanha? Mensagens ainda não enviadas não serão enviadas.')) {
-      return;
-    }
     setProcessando(true);
     setAcaoErro(null);
     setAcaoMsg(null);
@@ -175,7 +180,6 @@ export default function CampanhaDetalhePage() {
   }
 
   async function excluir() {
-    if (!window.confirm('Excluir esta campanha? Esta ação não pode ser desfeita.')) return;
     setProcessando(true);
     setAcaoErro(null);
     try {
@@ -188,17 +192,24 @@ export default function CampanhaDetalhePage() {
   }
 
   if (carregando) {
-    return <p className="text-sm text-gray-500">carregando…</p>;
+    return (
+      <p className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Carregando campanha…
+      </p>
+    );
   }
   if (erroCarga || !campanha) {
     return (
       <div>
-        <Link href="/campanhas" className="text-xs text-gray-600 hover:text-gray-900">
-          ← Voltar para campanhas
+        <Link
+          href="/campanhas"
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar para campanhas
         </Link>
-        <p className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-          {erroCarga ?? 'Campanha não encontrada.'}
-        </p>
+        <AlertErro className="mt-3">{erroCarga ?? 'Campanha não encontrada.'}</AlertErro>
       </div>
     );
   }
@@ -213,19 +224,31 @@ export default function CampanhaDetalhePage() {
 
   return (
     <div className="max-w-3xl">
-      <Link href="/campanhas" className="text-xs text-gray-600 hover:text-gray-900">
-        ← Voltar para campanhas
+      <Link
+        href="/campanhas"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para campanhas
       </Link>
-      <div className="mt-2 mb-4 flex items-center justify-between gap-3 flex-wrap">
-        <h1 className="text-2xl font-semibold">{campanha.nome}</h1>
-        <span className={`text-xs rounded px-2 py-0.5 ${st.classe}`}>{st.label}</span>
+      <div className="mb-4 mt-2 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-3xl font-bold">{campanha.nome}</h1>
+        <Badge
+          variant="outline"
+          className={cn('shrink-0 border-transparent', st.classe)}
+        >
+          {st.label}
+        </Badge>
       </div>
 
       {/* Resumo */}
-      <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 rounded-lg border bg-card p-4 text-sm text-card-foreground shadow-sm">
         <Item label="Canal">{canalLabel(campanha.canal)}</Item>
         <Item label="Mensagem">
-          <Link href={`/templates/${campanha.templateId}`} className="text-gray-900 underline">
+          <Link
+            href={`/templates/${campanha.templateId}`}
+            className="font-medium text-primary hover:underline"
+          >
             {templateNome ?? 'ver mensagem'}
           </Link>
         </Item>
@@ -238,64 +261,56 @@ export default function CampanhaDetalhePage() {
       </div>
 
       {mensagemPreview && (
-        <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4">
-          <h2 className="text-sm font-medium text-gray-900 mb-2">Prévia da mensagem</h2>
+        <div className="mt-4 rounded-lg border bg-card p-4 text-card-foreground shadow-sm">
+          <h2 className="mb-2 text-sm font-medium">Prévia da mensagem</h2>
           {mensagemPreview.canal === 'EMAIL' ? (
             <div>
-              <div className="text-xs text-gray-600 mb-1">
-                Assunto: <strong>{mensagemPreview.assunto}</strong>
+              <div className="mb-1 text-xs text-muted-foreground">
+                Assunto: <strong className="text-foreground">{mensagemPreview.assunto}</strong>
               </div>
               <iframe
                 title="Prévia do e-mail"
                 srcDoc={mensagemPreview.html}
                 sandbox=""
-                className="w-full h-64 rounded-md border border-gray-200 bg-white"
+                className="h-64 w-full rounded-md border bg-white"
               />
             </div>
           ) : (
-            <div className="text-sm text-gray-700">
+            <div className="text-sm">
               <div>
                 Template Meta: <strong>{mensagemPreview.metaTemplateName ?? '—'}</strong>
                 {mensagemPreview.metaLanguage ? ` (${mensagemPreview.metaLanguage})` : ''}
               </div>
               {Object.keys(mensagemPreview.variaveisAplicadas ?? {}).length > 0 && (
-                <div className="mt-1 text-xs text-gray-600">
+                <div className="mt-1 text-xs text-muted-foreground">
                   Variáveis:{' '}
                   {Object.entries(mensagemPreview.variaveisAplicadas)
                     .map(([k, v]) => `${k}=${v}`)
                     .join(', ')}
                 </div>
               )}
-              <p className="mt-2 text-xs text-gray-500">
-                O texto do WhatsApp é o aprovado na Meta; aqui mostramos a referência e os exemplos das
-                variáveis.
+              <p className="mt-2 text-xs text-muted-foreground">
+                O texto do WhatsApp é o aprovado na Meta; aqui mostramos a referência e os exemplos
+                das variáveis.
               </p>
             </div>
           )}
         </div>
       )}
 
-      {acaoMsg && (
-        <p role="status" className="mt-4 text-sm text-green-800 bg-green-50 border border-green-200 rounded-md p-3">
-          {acaoMsg}
-        </p>
-      )}
-      {acaoErro && (
-        <p role="alert" className="mt-4 text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-          {acaoErro}
-        </p>
-      )}
+      {acaoMsg && <AlertSucesso className="mt-4">{acaoMsg}</AlertSucesso>}
+      {acaoErro && <AlertErro className="mt-4">{acaoErro}</AlertErro>}
 
       {/* RASCUNHO: estimativa + gate + disparar */}
       {isRascunho && (
         <div className="mt-6 space-y-4">
-          <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <h2 className="text-sm font-medium text-gray-900 mb-3">Antes de disparar</h2>
+          <div className="rounded-lg border bg-card p-4 text-card-foreground shadow-sm">
+            <h2 className="mb-3 text-sm font-medium">Antes de disparar</h2>
             <div className="grid grid-cols-2 gap-3">
               <Kpi
                 label="Vão receber"
                 valor={estimativa ? String(estimativa.destinatarios) : '…'}
-                sub="contatos com opt-in no segmento"
+                sub="contatos com opt-in no grupo"
               />
               <Kpi
                 label="Custo estimado"
@@ -304,38 +319,48 @@ export default function CampanhaDetalhePage() {
               />
             </div>
             {estimativa?.destinatarios === 0 && (
-              <p className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded px-3 py-2">
-                Nenhum contato com opt-in de {canalLabel(campanha.canal)} neste segmento. Ajuste o
-                segmento ou marque o opt-in dos contatos antes de disparar.
-              </p>
+              <AlertAviso className="mt-3">
+                Nenhum contato com opt-in de {canalLabel(campanha.canal)} neste grupo. Ajuste o
+                grupo ou marque o opt-in dos contatos antes de disparar.
+              </AlertAviso>
             )}
           </div>
 
           {conexaoAtiva === false && (
-            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+            <AlertAviso>
               Você ainda não tem {canalLabel(campanha.canal)} conectado.{' '}
-              <Link href="/conexoes" className="underline font-medium">
+              <Link href="/conexoes" className="font-medium underline">
                 Conectar agora
               </Link>{' '}
               para poder disparar.
-            </div>
+            </AlertAviso>
           )}
 
-          <div className="flex flex-wrap gap-2">
-            <button
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
               type="button"
               onClick={() => acao('disparar')}
               disabled={processando || conexaoAtiva !== true || estimativa?.destinatarios === 0}
-              className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {processando
-                ? 'Processando…'
-                : campanha.agendadoPara
-                  ? 'Agendar disparo'
-                  : 'Disparar agora'}
-            </button>
+              {processando ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processando…
+                </>
+              ) : campanha.agendadoPara ? (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Agendar disparo
+                </>
+              ) : (
+                <>
+                  <Send className="mr-2 h-4 w-4" />
+                  Disparar agora
+                </>
+              )}
+            </Button>
             {conexaoAtiva === null && (
-              <span className="text-xs text-gray-500 self-center">verificando conexão…</span>
+              <span className="text-xs text-muted-foreground">verificando conexão…</span>
             )}
           </div>
         </div>
@@ -344,7 +369,7 @@ export default function CampanhaDetalhePage() {
       {/* Acompanhamento (enviando / pausada / concluída / cancelada) */}
       {!isRascunho && analytics && (
         <div className="mt-6 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
             <Kpi label="Destinatários" valor={String(analytics.totais.destinatarios)} />
             <Kpi label="Enviadas" valor={String(analytics.totais.enviadas)} />
             <Kpi
@@ -361,14 +386,14 @@ export default function CampanhaDetalhePage() {
             <Kpi label="Falhas" valor={String(analytics.totais.falhas)} sub={pct(analytics.taxas.falha)} />
           </div>
 
-          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
+          <div className="rounded-lg border bg-card p-4 text-sm text-card-foreground shadow-sm">
             <Item label="Custo real">{brl(Number(analytics.custo.realBrl ?? analytics.custo.estimadoBrl))}</Item>
           </div>
 
           {analytics.porMotivoFalha.length > 0 && (
-            <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm">
-              <h3 className="font-medium text-gray-900 mb-2">Falhas por motivo</h3>
-              <ul className="space-y-1 text-gray-700">
+            <div className="rounded-lg border bg-card p-4 text-sm text-card-foreground shadow-sm">
+              <h3 className="mb-2 font-medium">Falhas por motivo</h3>
+              <ul className="space-y-1 text-muted-foreground">
                 {analytics.porMotivoFalha.map((m, i) => (
                   <li key={i} className="flex justify-between">
                     <span>{m.motivo}</span>
@@ -380,7 +405,10 @@ export default function CampanhaDetalhePage() {
           )}
 
           {campanha.status === 'DISPARANDO' && (
-            <p className="text-xs text-gray-500">Atualizando automaticamente a cada 5 segundos…</p>
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Atualizando automaticamente a cada 5 segundos…
+            </p>
           )}
         </div>
       )}
@@ -388,53 +416,98 @@ export default function CampanhaDetalhePage() {
       {/* Ações de ciclo de vida */}
       <div className="mt-8 flex flex-wrap gap-2">
         {isPausada && (
-          <button
+          <Button
             type="button"
             onClick={() => acao('disparar')}
             disabled={processando || conexaoAtiva !== true}
-            className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium hover:bg-gray-700 disabled:opacity-60 disabled:cursor-not-allowed"
           >
+            <Play className="mr-2 h-4 w-4" />
             Retomar envio
-          </button>
+          </Button>
         )}
         {podePausar && (
-          <button
-            type="button"
-            onClick={() => acao('pausar')}
-            disabled={processando}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-          >
+          <Button type="button" variant="outline" onClick={() => acao('pausar')} disabled={processando}>
+            <Pause className="mr-2 h-4 w-4" />
             Pausar
-          </button>
+          </Button>
         )}
         {podeCancelar && (
-          <button
+          <Button
             type="button"
-            onClick={() => acao('cancelar')}
+            variant="destructive"
+            onClick={() => setConfirmando('cancelar')}
             disabled={processando}
-            className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
           >
+            <XCircle className="mr-2 h-4 w-4" />
             Cancelar campanha
-          </button>
+          </Button>
         )}
         {podeExcluir && (
-          <button
+          <Button
             type="button"
-            onClick={excluir}
+            variant="destructive"
+            onClick={() => setConfirmando('excluir')}
             disabled={processando}
-            className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-60"
           >
+            <Trash2 className="mr-2 h-4 w-4" />
             Excluir
-          </button>
+          </Button>
         )}
       </div>
 
       {podeDisparar && conexaoAtiva === true && (
-        <p className="mt-3 text-xs text-gray-500">
+        <p className="mt-3 text-xs text-muted-foreground">
           Ao disparar, criamos uma mensagem por contato e enviamos com intervalo de segurança
           (respeitando os limites do seu {canalLabel(campanha.canal)}).
         </p>
       )}
+
+      {/* Confirmações (Dialog do kit no lugar de window.confirm) */}
+      <Dialog open={confirmando !== null} onOpenChange={(aberto) => !aberto && setConfirmando(null)}>
+        {confirmando === 'cancelar' ? (
+          <>
+            <DialogHeader
+              titulo="Cancelar esta campanha?"
+              descricao="As mensagens que ainda não saíram não serão enviadas. Isso não pode ser desfeito."
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmando(null)}>
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setConfirmando(null);
+                  acao('cancelar');
+                }}
+              >
+                Sim, cancelar campanha
+              </Button>
+            </DialogFooter>
+          </>
+        ) : (
+          <>
+            <DialogHeader
+              titulo="Excluir esta campanha?"
+              descricao="Ela some da sua lista. Esta ação não pode ser desfeita."
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmando(null)}>
+                Voltar
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  setConfirmando(null);
+                  excluir();
+                }}
+              >
+                Sim, excluir
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </Dialog>
     </div>
   );
 }
@@ -442,18 +515,18 @@ export default function CampanhaDetalhePage() {
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-sm font-medium text-gray-900">{children}</div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="text-sm font-medium">{children}</div>
     </div>
   );
 }
 
 function Kpi({ label, valor, sub }: { label: string; valor: string; sub?: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-3">
-      <div className="text-xs text-gray-600">{label}</div>
-      <div className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{valor}</div>
-      {sub && <div className="text-xs text-gray-500 mt-0.5">{sub}</div>}
+    <div className="rounded-lg border bg-card p-3 text-card-foreground shadow-sm">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-bold tabular-nums">{valor}</div>
+      {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
     </div>
   );
 }

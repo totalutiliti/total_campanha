@@ -1,8 +1,8 @@
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@total-campanha/db';
-import type { Job } from 'bullmq';
 import { normalizarTelefoneE164 } from '@total-campanha/shared';
+import type { Job } from 'bullmq';
 
 import { PrismaService } from '../common/prisma.service.js';
 

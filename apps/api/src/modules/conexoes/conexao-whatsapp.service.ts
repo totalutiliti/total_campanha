@@ -9,7 +9,6 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { env } from '../../config/config.module.js';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { CryptoService } from '../../common/crypto/crypto.service.js';
 import {
@@ -17,6 +16,7 @@ import {
   MetaWhatsappClient,
 } from '../../common/integrations/meta-whatsapp.client.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { env } from '../../config/config.module.js';
 
 import { AtualizarConexaoWhatsappDto } from './dto/atualizar-conexao-whatsapp.dto.js';
 import { CriarConexaoWhatsappDto } from './dto/criar-conexao-whatsapp.dto.js';
@@ -277,8 +277,18 @@ export class ConexaoWhatsappService {
       return { displayPhoneNumber: info.displayPhoneNumber, qualityRating: info.qualityRating };
     } catch (err) {
       if (err instanceof MetaApiError) {
+        // NUNCA propagar a mensagem crua da Meta: em erros de credencial ela
+        // ECOA o token digitado ("Malformed access token EAA...") — vazaria na
+        // resposta HTTP e em logs de requisição. Detalhe completo só no log
+        // do servidor, com o token mascarado.
+        this.logger.warn({
+          msg: 'validar_token_meta_falhou',
+          status: err.status,
+          metaCode: err.body.error?.code,
+          metaMessage: this.crypto.maskBearer(err.body.error?.message ?? ''),
+        });
         throw new BadRequestException(
-          `Token ou phoneNumberId inválido: ${err.body.error?.message ?? 'erro Meta'}`,
+          'A Meta recusou as credenciais. Confira o WABA ID, o Phone Number ID e o token (precisa ser o token permanente do usuário de sistema, com as permissões whatsapp_business_*).',
         );
       }
       throw err;
@@ -308,7 +318,9 @@ export class ConexaoWhatsappService {
       tierMeta: conexao.tierMeta,
       qualityRating: conexao.qualityRating,
       webhook: {
-        url: `${this.webhookBaseUrl}/${tenantSlug}`,
+        // O secret faz parte da URL: é a autenticação do POST (o slug é
+        // público; o secret não). O mesmo valor é o verify_token do handshake.
+        url: `${this.webhookBaseUrl}/${tenantSlug}/${conexao.webhookSecret}`,
         secret: conexao.webhookSecret,
       },
       ultimoTeste: conexao.ultimoTeste,

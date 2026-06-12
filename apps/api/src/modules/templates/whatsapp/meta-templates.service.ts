@@ -1,9 +1,9 @@
 import { Injectable, Logger, PreconditionFailedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { env } from '../../../config/config.module.js';
 import { CryptoService } from '../../../common/crypto/crypto.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { env } from '../../../config/config.module.js';
 
 export interface MetaTemplateAprovado {
   name: string;

@@ -8,10 +8,13 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@total-campanha/db';
 
-import { env } from '../../config/config.module.js';
 import { AuditService } from '../../common/audit/audit.service.js';
+import { CryptoService } from '../../common/crypto/crypto.service.js';
+import { MetaWhatsappClient } from '../../common/integrations/meta-whatsapp.client.js';
 import { MailService } from '../../common/mail/mail.service.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { CUSTO_REFERENCIA, UsageService } from '../../common/usage/usage.service.js';
+import { env } from '../../config/config.module.js';
 
 import { AtualizarTemplateDto } from './dto/atualizar-template.dto.js';
 import { CriarTemplateDto } from './dto/criar-template.dto.js';
@@ -32,6 +35,9 @@ export class TemplatesService {
     private readonly render: MjmlRenderService,
     private readonly mail: MailService,
     private readonly meta: MetaTemplatesService,
+    private readonly crypto: CryptoService,
+    private readonly metaClient: MetaWhatsappClient,
+    private readonly usage: UsageService,
   ) {
     this.nodeEnv = env(config, 'NODE_ENV');
   }
@@ -178,24 +184,38 @@ export class TemplatesService {
     if (!dto.destinatarioTelefoneE164) {
       throw new BadRequestException('Informe destinatarioTelefoneE164 para teste WhatsApp.');
     }
-    // Em Fase 3 ainda não disparamos via Meta direto; a integração final entra
-    // com o worker da Fase 5 (DispatchWhatsappProcessor). Aqui só validamos
-    // que a conexão existe e logamos a intenção.
-    if (this.nodeEnv === 'production') {
+
+    // Envio real via Meta Cloud API com as variáveis de exemplo do template.
+    const conexao = await this.prisma.runInTenant(tenantId, (tx) =>
+      tx.conexaoWhatsapp.findUnique({ where: { tenantId } }),
+    );
+    if (!conexao || conexao.status !== 'ATIVA') {
       throw new PreconditionFailedException(
-        'Teste de envio WhatsApp ainda não disponível — disponível a partir da Fase 5.',
+        'Conecte o WhatsApp da empresa antes de enviar um teste.',
       );
     }
-    this.logger.warn({
-      msg: 'teste_envio_whatsapp_stub',
-      tenantId,
+
+    const token = await this.crypto.decryptToken(conexao.tokenEncrypted);
+    const ordemVariaveis = Array.isArray(t.variaveis)
+      ? (t.variaveis as Array<{ key?: string }>).map((v) => variaveis[v?.key ?? ''] ?? '')
+      : [];
+    await this.metaClient.sendTemplate({
+      token,
+      phoneNumberId: conexao.phoneNumberId,
+      to: dto.destinatarioTelefoneE164,
+      templateName: t.metaTemplateName ?? '',
+      language: t.metaLanguage ?? 'pt_BR',
+      variables: ordemVariaveis,
+    });
+
+    // Chamada paga → usage_log no momento da chamada (RULES 6.1).
+    await this.usage.log(tenantId, 'meta.whatsapp.marketing.br', CUSTO_REFERENCIA.whatsappMarketingBr, {
+      origem: 'template.teste_envio',
       templateId: id,
-      destino: dto.destinatarioTelefoneE164,
     });
     await this.audit.log(tenantId, userId, 'template.teste_envio', id, {
       canal: 'WHATSAPP',
       destino: dto.destinatarioTelefoneE164,
-      stub: true,
     });
     return { ok: true, canal: 'WHATSAPP', destino: dto.destinatarioTelefoneE164 };
   }

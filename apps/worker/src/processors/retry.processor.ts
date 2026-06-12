@@ -105,9 +105,35 @@ export class RetryProcessor extends WorkerHost implements OnModuleInit {
       await fila.add(
         'enviar',
         { mensagemId: msg.id, tenantId: msg.tenantId, campanhaId: msg.campanhaId },
-        { delay, attempts: 1 },
+        // jobId único por tentativa: o job original (jobId = mensagemId) pode
+        // ainda existir no set de completed — reusar o id deduparia o retry.
+        { jobId: `${msg.id}:r${falhas.length}`, delay, attempts: 1 },
       );
       reenfileiradas += 1;
+    }
+
+    // Reconciliação de jobs perdidos: mensagens ENFILEIRADA cujo job sumiu do
+    // Redis (ex.: Redis caiu no meio do addBulk do disparo) seriam órfãs para
+    // sempre. Re-adicionamos com o MESMO jobId da mensagem — se o job original
+    // ainda existe (waiting/delayed/completed recente), o BullMQ dedupa e nada
+    // muda (o delay/throttle original é preservado); se sumiu, ressuscita.
+    // `falhaMotivo: null` exclui mensagens em ciclo de retry (jobId próprio).
+    const pendentesSemFalha = await this.prisma.mensagem.findMany({
+      where: {
+        status: 'ENFILEIRADA',
+        falhaMotivo: null,
+        campanhaId: { in: campanhasAtivas.map((c) => c.id) },
+      },
+      take: 500,
+      select: { id: true, tenantId: true, campanhaId: true, canal: true },
+    });
+    for (const msg of pendentesSemFalha) {
+      const fila = msg.canal === 'WHATSAPP' ? this.filaWhatsapp : this.filaEmail;
+      await fila.add(
+        'enviar',
+        { mensagemId: msg.id, tenantId: msg.tenantId, campanhaId: msg.campanhaId },
+        { jobId: msg.id, attempts: 1 },
+      );
     }
 
     // Finaliza campanhas DISPARANDO sem mensagens pendentes/enfileiradas.

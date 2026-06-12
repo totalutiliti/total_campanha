@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { useAdminAuth } from '../../../../lib/admin/context';
 import { dataHora } from '../../../../lib/admin/format';
 import { MensagemErro, Vazio } from '../../../../lib/admin/ui';
+import { mensagemErro } from '../../../../lib/erro';
 
 interface Entrada {
   id: string;
@@ -43,7 +44,7 @@ export default function AuditoriaPage() {
         const r = await api<Entrada[]>({ path: '/admin/audit?limite=100' });
         if (ativo) setItens(r);
       } catch (e) {
-        if (ativo) setErro(e instanceof Error ? e.message : 'Falha ao carregar.');
+        if (ativo) setErro(mensagemErro(e, 'Falha ao carregar.'));
       }
     })();
     return () => {
@@ -54,54 +55,66 @@ export default function AuditoriaPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
-        <h1 className="text-2xl font-semibold">Auditoria</h1>
-        {itens && <span className="text-xs text-gray-500">{itens.length} eventos recentes</span>}
+        <h1 className="text-2xl font-semibold tracking-tight">Auditoria</h1>
+        {itens && (
+          <span className="text-xs text-muted-foreground">{itens.length} eventos recentes</span>
+        )}
       </div>
-      <p className="text-xs text-gray-500 mb-4">
+      <p className="text-xs text-muted-foreground mb-4">
         Ações sensíveis registradas na plataforma (mais recentes primeiro).
       </p>
 
       {erro && <MensagemErro>{erro}</MensagemErro>}
 
       {itens === null ? (
-        <p className="text-sm text-gray-500">carregando…</p>
+        <p className="text-sm text-muted-foreground">Carregando…</p>
       ) : itens.length === 0 ? (
         <Vazio>Nenhum evento registrado ainda.</Vazio>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-2 font-medium whitespace-nowrap">Quando</th>
-                <th className="px-4 py-2 font-medium">Ação</th>
-                <th className="px-4 py-2 font-medium">Recurso</th>
-                <th className="px-4 py-2 font-medium">Tenant</th>
-                <th className="px-4 py-2 font-medium">Usuário</th>
-                <th className="px-4 py-2 font-medium">Detalhes</th>
+        <div className="overflow-x-auto rounded-lg border bg-card">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b bg-muted/50">
+                <th className="p-2 text-left text-xs font-medium whitespace-nowrap">Quando</th>
+                <th className="p-2 text-left text-xs font-medium">Ação</th>
+                <th className="p-2 text-left text-xs font-medium">Recurso</th>
+                <th className="p-2 text-left text-xs font-medium">Tenant</th>
+                <th className="p-2 text-left text-xs font-medium">Usuário</th>
+                <th className="p-2 text-left text-xs font-medium">Detalhes</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100 align-top">
+            <tbody className="align-top">
               {itens.map((e) => (
-                <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-2 whitespace-nowrap text-gray-600">
+                <tr key={e.id} className="border-b last:border-0 hover:bg-muted/50">
+                  <td className="p-2 text-sm whitespace-nowrap text-muted-foreground">
                     {dataHora(e.createdAt)}
                   </td>
-                  <td className="px-4 py-2">
-                    <code className="text-xs bg-gray-100 rounded px-1.5 py-0.5">{e.acao}</code>
+                  <td className="p-2 text-sm">
+                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{e.acao}</code>
                   </td>
                   <td
-                    className="px-4 py-2 font-mono text-xs text-gray-500"
+                    className="p-2 font-mono text-xs text-muted-foreground"
                     title={e.recurso ?? ''}
                   >
                     {curto(e.recurso)}
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs text-gray-500" title={e.tenantId ?? 'plataforma'}>
-                    {e.tenantId ? curto(e.tenantId) : <span className="text-gray-400">plataforma</span>}
+                  <td
+                    className="p-2 font-mono text-xs text-muted-foreground"
+                    title={e.tenantId ?? 'plataforma'}
+                  >
+                    {e.tenantId ? (
+                      curto(e.tenantId)
+                    ) : (
+                      <span className="text-muted-foreground/60">plataforma</span>
+                    )}
                   </td>
-                  <td className="px-4 py-2 font-mono text-xs text-gray-500" title={e.userId ?? ''}>
+                  <td
+                    className="p-2 font-mono text-xs text-muted-foreground"
+                    title={e.userId ?? ''}
+                  >
                     {curto(e.userId)}
                   </td>
-                  <td className="px-4 py-2 text-xs text-gray-500">
+                  <td className="p-2 text-xs text-muted-foreground">
                     <div className="max-w-xs truncate" title={resumirDados(e.dados)}>
                       {resumirDados(e.dados)}
                     </div>

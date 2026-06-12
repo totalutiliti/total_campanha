@@ -10,6 +10,158 @@
 
 ---
 
+## 2026-06-12 — Prontidão de produção + identidade visual (branch feat/prontidao-producao)
+
+**Categoria:** Produção / UX / Segurança
+
+Mesma sessão da auditoria (entrada abaixo): implementados TODOS os bloqueantes de
+código apontados por ela, mais a identidade visual da skill
+`.claude/skills/identidade-visual-totalia` aplicada ao app inteiro com UX para
+vendedores. `pnpm -r lint/typecheck/build` verdes. **Backend:**
+
+- **Gate de billing no disparo** — `prepararDisparo` bloqueia tenant não-ATIVO/TRIAL
+  (e TRIAL vencido); defesa em profundidade nos 2 dispatch processors do worker
+  (mensagem CANCELADA com motivo). Custo Meta não vaza mais para inadimplente.
+- **SES real** — os dois MailServices (api+worker) enviam via SESv2 `SendEmail`
+  quando `MAIL_PROVIDER=ses` (headers custom suportados p/ List-Unsubscribe);
+  SMTP autenticado como fallback; validação cruzada no boot (ses exige AWS keys).
+- **Opt-out de verdade** — worker emite token HMAC real (OptOutTokenService
+  portado), injeta rodapé de descadastro em TODO e-mail de campanha, expõe
+  `{{opt_out_url}}` ao template; API ganhou `POST /p/opt-out/:token` (one-click
+  RFC 8058). `placeholder-token` morto.
+- **Senha fim-a-fim** — forgot envia e-mail real (link `/redefinir-senha?token=`),
+  telas `/esqueci-senha` + `/redefinir-senha`, link na tela de login,
+  `PATCH /auth/senha` (trocar senha autenticado, Throttle 5/15min).
+- **Webhooks endurecidos** — Meta: URL agora é
+  `/webhooks/meta/{slug}/{webhookSecret}` (slug é público; secret autentica o
+  POST; comparação timing-safe; POST inválido = 200 silencioso, handshake
+  inválido = 403 alto) + `@SkipThrottle` no controller (rajada de status);
+  Asaas: **fail-closed** sem `ASAAS_WEBHOOK_TOKEN`. `instrucao_whatsapp_byoa.md` §6 atualizada.
+- **Vazamento de token corrigido** — erro da Meta não ecoa mais o token digitado
+  na resposta HTTP (mensagem limpa; detalhe só em log com maskBearer).
+- **Disparo robusto** — transição de status atômica (updateMany-guard) antes de
+  criar mensagens (2 cliques concorrentes ≠ envio duplo); `jobId = mensagemId`
+  (idempotência BullMQ); retomada de PAUSADA re-enfileira só ENFILEIRADA
+  existentes (não duplica); RetryProcessor reconcilia jobs perdidos (re-add com
+  mesmo jobId → dedupe preserva delay/throttle) e usa jobId único por tentativa;
+  processors com guarda de idempotência (só processam PENDENTE/ENFILEIRADA).
+- **Teste-envio WhatsApp real** em produção (sendTemplate + usage_log) — stub 412 removido.
+- **tierMeta via webhook** `account_update`/`messaging_limit_update` (LIÇÃO L11).
+- **Billing fecha o ciclo** — `AsaasClient.linkPagamento()` (invoiceUrl do 1º
+  payment), exposto em `POST /billing/assinar` e `GET /billing/atual`.
+- Inbox enriquecido (conversa devolve contato + última mensagem p/ a tela).
+
+**Frontend (identidade total + vendedores):** tokens claro/escuro da skill em
+`globals.css`/tailwind.config; kit `components/ui/*` (Button/Card/Input/Label/
+Badge/PasswordInput/Dialog/Alerts, CVA + cn); `LogoTotal` (barras verdes +
+wordmark CAMPANHA); shell sidebar w-64 com nav por papel (Início, Campanhas,
+Contatos, Grupos, Mensagens, **Respostas**, Conexões, **Plano** [admin],
+**Minha conta**) + footer usuário/sair/toggle tema (next-themes, claro default)
++ mobile com menu; `BannerConta` (trial acabando/inadimplente com ação);
+telas novas: Respostas (inbox 2 colunas + thread + janela 24h explicada),
+Plano (cards Starter/Pro/Enterprise + assinar/trocar/cancelar com Dialog +
+link de pagamento), Minha conta (trocar senha); login/esqueci/redefinir na
+identidade; `lib/erro.ts` reescrito (Zod issues → frases pt-BR, NUNCA JSON cru);
+TODAS as ~32 telas existentes (tenant + admin + públicas) reestilizadas com
+tokens/kit/lucide e textos de vendedor (2 agentes); `/dev/*` removido;
+`campanha-status.ts` com pares dark.
+
+**Pipeline:** guarda de ref `main` nos 3 deploys (workflow_dispatch não builda
+mais de feature branch); `prisma generate` antes do CI; smoke também em
+web/worker (L08); rollback por `revision activate` (modo Single — runbook §11
+atualizado); Bicep: probes live/ready nos apps, ACR **existente** parametrizado
+(`acrResourceGroup`, módulo `modules/acr-pull.bicep` — resolve a colisão global
+de nome), action group + alertas (api 5xx, PG cpu>80%, Redis mem>90%);
+smoke-test-prod.sh: credenciais via env/GitHub Secrets (KV privado é inacessível
+do runner) + criação/remoção de campanha de teste (checklist CLAUDE.md);
+`infra/dev/deploy-dev-local.ps1` (build+push+update dev).
+
+**Pendências manuais do João para PROD** (não automatizáveis daqui): branch
+protection na UI do GitHub; registrar domínio + DNS; conta AWS com SES em modo
+produção + keys; conta Asaas + `ASAAS_API_KEY`/`ASAAS_WEBHOOK_TOKEN`; Service
+Principals + `AZURE_CREDENTIALS`; provisionar `rg-totalcampanha-prod` (Bicep
+fases A/B) + popular Key Vault + wiring env/secrets + KEDA scaler; usuários de
+smoke; reativar triggers `push` dos deploys; rotacionar senha SA de dev;
+decidir trial do piloto (expira 16/06). Sem UI de 2FA-setup e sem gestão de
+usuários adicionais do tenant (débitos conhecidos, API existe).
+
+---
+
+## 2026-06-12 — Auditoria completa do ambiente DEV Azure (2 bugs de env corrigidos)
+
+**Categoria:** Auditoria / Infra
+
+Auditoria funcional + segurança + infra do deploy dev no Azure (UI tela a tela no
+Chrome, smoke da API, 3 agentes de código). Tudo que foi criado de teste foi
+removido (hard delete LGPD). **Duas correções aplicadas no ambiente (novas revisions):**
+
+1. **`tc-web-dev` sem `API_BASE_URL`** → SSR das páginas públicas caía no fallback
+   `localhost:3001` e `/p/opt-in/*` + `/p/opt-out/*` retornavam **404** (opt-in LGPD
+   fora do ar desde o deploy). Fix: `az containerapp update --set-env-vars API_BASE_URL=<fqdn da api>`.
+2. **`tc-worker-dev` com `DATABASE_URL`=app_user** → processors cross-tenant
+   (retry, verificar-emails, trial) varriam com RLS ativo e recebiam **0 linhas em
+   silêncio** — retry/verificação de domínio/expiração de trial inertes desde o deploy.
+   Fix: `DATABASE_URL=secretref:database-migration-url` (migration_user, BYPASSRLS,
+   como o código do worker documenta). `infra/dev/README.md` atualizado com os dois ⚠️.
+
+**Funciona (verificado ao vivo):** login/JWT/refresh, RBAC (tenant não acessa /admin),
+validação Zod nos DTOs, busca/CRUD/import xlsx-csv de contatos (wizard 4 passos,
+E.164 ok), grupos com prévia live, templates email com preview MJML, campanha
+rascunho+estimativa com travas corretas (sem opt-in → 0 destinatários; sem conexão →
+botão disparar desabilitado), conexão WhatsApp valida na Meta antes de salvar,
+conexão email stub com tabela DNS, painel Super Admin completo (custos, tenants,
+auditoria registrando cada ação), opt-in público pós-fix, opt-out gracioso com token
+inválido, direito ao esquecimento (4 hard deletes), Swagger off em prod, logs pino
+com authorization REDACTED.
+
+**Achados pendentes (relatório completo na conversa de 12/06):**
+- ALTO: webhook Meta POST sem assinatura (slug é público — forja de opt-out/inbox/DoS).
+- ALTO: webhook Asaas fail-open sem `ASAAS_WEBHOOK_TOKEN` (200 anônimo — confirmado ao vivo).
+- ALTO: erro da Meta ecoa o **token completo** digitado na resposta HTTP do
+  `POST /conexoes/whatsapp` (sanitizar com maskBearer antes de propagar).
+- Bloqueantes de PROD (agentes): email sem provider real (SMTP stub, `ses` cai p/ SMTP);
+  opt-out `placeholder-token` no List-Unsubscribe; INADIMPLENTE não bloqueia disparo;
+  billing sem UI; esqueci-senha inexistente (e onboarding via admin depende dele);
+  ACR `acrtotalcampanha01` já existe no RG dev (Bicep PROD vai colidir); smoke-test
+  lê Key Vault privado de runner público (falha sempre); branch protection não aplicada.
+- Sem UI: Inbox e Billing (APIs existem, nav não tem as telas).
+- Trial do tenant piloto expira **16/06/2026** → vira INADIMPLENTE (sem bloqueio de disparo).
+- Redis dev com min-replicas=0 (drift vs min=1 documentado; não derrubou nada ainda).
+- `.gitignore` com regra `*.local.md` ainda não commitada (protege `acessos-azure-dev.local.md`
+  que tem senha real do SA dev — commitar e rotacionar senha no go-live).
+
+
+
+**Categoria:** Infra / Deploy
+
+Primeiro deploy real do app no Azure — ambiente **dev/POC** seguindo o padrão dos
+projetos irmãos (`rg-kegsafe-dev`): ACR Basic + Postgres Flexible Burstable +
+Container Apps Consumption, **sem** VNet/PE/Key Vault (isso é só PROD). Runbook
+completo em `infra/dev/README.md`. Segredos em `../.azure-dev-secrets.env` (fora do repo).
+
+- **No ar:** web `https://tc-web-dev.<dom>`, api `.../api/v1`, painel `/admin`.
+  `<dom>` = `yellowbeach-5d39f3f8.brazilsouth.azurecontainerapps.io`. Login tenant
+  `admin@cardanstencar.dev`/`admin123`; super admin `joao@totalutiliti.com.br`.
+- **Scale-to-zero** em api/web (compute ~US$0 ocioso; cold start ~20-40s na 1ª req).
+  **Redis ficou min=1** — a API conecta no boot e o cold-start do Redis derrubava a
+  ativação. Custo ≈ **US$31/mês** (ACR $5 + PG B1ms $13 + Redis $13). Reduzir: parar
+  o Postgres entre demos e/ou Redis min=0.
+- **DB:** `migrate deploy` como `tcadmin` (no Flexible Server o admin TEM `bypassrls`+`createrole`,
+  então a migration `0002_enable_rls` roda inteira); papéis `app_user`/`migration_user`
+  com senha + grants; `seed` + `criar-super-admin` com o mesmo `AUTH_PEPPER` dos apps;
+  `azure.extensions=PGCRYPTO,UUID-OSSP`.
+- **5 bugs de Dockerfile corrigidos** (valiam p/ PROD também): faltava `pnpm --filter
+  @total-campanha/db build`; `deploy --prod` com filtro `...` (3 projetos); Prisma
+  Client sumia no `deploy --prod` (runtime passou a usar o estágio de build); faltava
+  `apk add openssl` (Alpine 3/OpenSSL 3 vs engine openssl-1.1); `apps/web/public/.gitkeep`.
+- **Build:** `az acr build` quebra no cliente Windows (UnicodeEncodeError do colorama
+  ao transmitir o log do pnpm) → **build local com Docker + push** (tag `:dev`).
+  Contexto via `git archive HEAD` (sem `node_modules`/symlinks que travavam o tar).
+- **Ressalva:** cookie de refresh cross-site (SameSite=None) entre api e web em domínios
+  diferentes — sessão pode cair em ~15min se o navegador bloquear cookie de terceiro.
+  Aceitável p/ POC; em PROD usar domínio próprio (`api.<dominio>` + `app.<dominio>`).
+- Deploy automático em push na `main` segue **desabilitado** (PROD Azure não provisionado).
+
 ## 2026-06-01 — Frontend Super Admin + criação de tenant pelo painel
 
 **Categoria:** Frontend / Super Admin

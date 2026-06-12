@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 50">
+  <!-- Logo Total IA Contabil — versao para FUNDOS ESCUROS (texto claro) -->
+  <!-- Derivada do componente canonico frontend/src/components/logo-totalia.tsx -->
+  <rect x="0" y="28" width="9" height="20" rx="1.5" fill="#2ECC71" />
+  <rect x="12" y="18" width="9" height="30" rx="1.5" fill="#27AE60" />
+  <rect x="24" y="6" width="9" height="42" rx="1.5" fill="#1B7A3D" />
+  <text x="40" y="34" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif" font-size="28" font-weight="800" fill="#F8FAFC">total</text>
+  <text x="118" y="34" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif" font-size="28" font-weight="800" fill="#2ECC71">ia</text>
+  <text x="40" y="47" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif" font-size="9.5" font-weight="800" fill="#F8FAFC" opacity="0.6" letter-spacing="2">CONTABIL</text>
+  <text x="115" y="47" font-family="Inter, system-ui, -apple-system, 'Segoe UI', Arial, sans-serif" font-size="8" fill="#F8FAFC" opacity="0.4">.com.br</text>
+</svg>

@@ -67,6 +67,50 @@ export class WebhookMetaProcessor extends WorkerHost {
       for (const msg of inbound) {
         await this.processarInbound(tenantId, msg);
       }
+
+      // account_update / messaging_limit (LIÇÃO L11): a Meta avisa quando o
+      // tier do número muda — refletimos em ConexaoWhatsapp.tierMeta para o
+      // throttle do disparo acompanhar o limite real.
+      await this.processarTierUpdate(tenantId, value as Record<string, unknown>);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Tier update (account_update) — RULES 7.1 / LIÇÃO L11
+  // -------------------------------------------------------------------------
+  private async processarTierUpdate(
+    tenantId: string,
+    value: Record<string, unknown>,
+  ): Promise<void> {
+    // Formatos observados: { event: 'messaging_limit_update'|'account_update',
+    //   current_limit: 'TIER_1K' } ou { messaging_limit: { current_limit } }.
+    const cru =
+      (value.current_limit as string | undefined) ??
+      ((value.messaging_limit as Record<string, unknown> | undefined)?.current_limit as
+        | string
+        | undefined);
+    if (!cru) return;
+
+    type Tier = 'TIER_250' | 'TIER_1K' | 'TIER_10K' | 'TIER_100K' | 'TIER_UNLIMITED';
+    const mapa: Record<string, Tier> = {
+      TIER_50: 'TIER_250',
+      TIER_250: 'TIER_250',
+      TIER_1K: 'TIER_1K',
+      TIER_10K: 'TIER_10K',
+      TIER_100K: 'TIER_100K',
+      TIER_UNLIMITED: 'TIER_UNLIMITED',
+    };
+    const tier = mapa[cru.toUpperCase()];
+    if (!tier) {
+      this.logger.warn({ msg: 'tier_update_desconhecido', tenantId, cru });
+      return;
+    }
+
+    const r = await this.prisma.runInTenant(tenantId, (tx) =>
+      tx.conexaoWhatsapp.updateMany({ where: { tenantId }, data: { tierMeta: tier } }),
+    );
+    if (r.count > 0) {
+      this.logger.log({ msg: 'tier_meta_atualizado', tenantId, tier });
     }
   }
 

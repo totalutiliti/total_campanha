@@ -1,6 +1,13 @@
 'use client';
 
+import { Check, ChevronRight, Copy, Loader2 } from 'lucide-react';
 import { useState } from 'react';
+
+import { cn } from '../../lib/cn';
+import { mensagemErro } from '../../lib/erro';
+import { AlertAviso, AlertErro, AlertSucesso } from '../ui/alerts';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 
 type Passo = 'pre-requisitos' | 'token' | 'dados' | 'webhook';
 
@@ -53,17 +60,17 @@ export function WhatsappWizard({ salvar }: Props) {
       setResultado(r);
       setPasso('webhook');
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Falha ao conectar.');
+      setErro(mensagemErro(e, 'Não conseguimos validar com a Meta. Confira os dados e tente de novo.'));
     } finally {
       setEnviando(false);
     }
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <div className="mx-auto max-w-3xl">
       <Stepper atual={passo} />
 
-      <div className="mt-6 rounded-lg border border-gray-200 bg-white p-6">
+      <div className="mt-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
         {passo === 'pre-requisitos' && (
           <PassoPreRequisitos onContinuar={() => setPasso('token')} />
         )}
@@ -103,18 +110,19 @@ function Stepper({ atual }: { atual: Passo }) {
   ];
   const ativoIdx = passos.findIndex((p) => p.chave === atual);
   return (
-    <ol className="flex items-center gap-2 text-xs text-gray-600">
+    <ol className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
       {passos.map((p, i) => (
         <li key={p.chave} className="flex items-center gap-2">
           <span
-            className={`flex h-6 w-6 items-center justify-center rounded-full border ${
-              i <= ativoIdx ? 'bg-gray-900 text-white border-gray-900' : 'border-gray-300'
-            }`}
+            className={cn(
+              'flex h-6 w-6 items-center justify-center rounded-full border tabular-nums',
+              i <= ativoIdx && 'border-primary bg-primary text-primary-foreground',
+            )}
           >
             {i + 1}
           </span>
-          <span className={i === ativoIdx ? 'font-medium text-gray-900' : ''}>{p.titulo}</span>
-          {i < passos.length - 1 && <span className="text-gray-300">→</span>}
+          <span className={cn(i === ativoIdx && 'font-medium text-foreground')}>{p.titulo}</span>
+          {i < passos.length - 1 && <ChevronRight className="h-3 w-3 text-muted-foreground/50" />}
         </li>
       ))}
     </ol>
@@ -125,24 +133,24 @@ function PassoPreRequisitos({ onContinuar }: { onContinuar: () => void }) {
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Antes de começar</h2>
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-muted-foreground">
         Conectar o WhatsApp oficial exige uma conta na Meta. Você (ou quem cuida da sua
         TI/marketing) vai precisar de:
       </p>
       <ul className="space-y-2 text-sm">
         <li className="flex gap-2">
-          <span className="text-gray-400">•</span>
+          <span className="text-muted-foreground">•</span>
           <span>CNPJ ativo registrado no Meta Business Manager.</span>
         </li>
         <li className="flex gap-2">
-          <span className="text-gray-400">•</span>
+          <span className="text-muted-foreground">•</span>
           <span>
             Conta WhatsApp Business API criada em{' '}
             <a
               href="https://business.facebook.com/wa/manage"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-700 underline"
+              className="font-medium text-primary hover:underline"
             >
               business.facebook.com/wa/manage
             </a>
@@ -150,24 +158,20 @@ function PassoPreRequisitos({ onContinuar }: { onContinuar: () => void }) {
           </span>
         </li>
         <li className="flex gap-2">
-          <span className="text-gray-400">•</span>
+          <span className="text-muted-foreground">•</span>
           <span>
             Número de telefone dedicado <strong>e</strong> verificado dentro da WABA. (Não
             funciona com número que está no app pessoal.)
           </span>
         </li>
         <li className="flex gap-2">
-          <span className="text-gray-400">•</span>
+          <span className="text-muted-foreground">•</span>
           <span>App de sistema criado no Meta for Developers para emitir token permanente.</span>
         </li>
       </ul>
-      <button
-        type="button"
-        onClick={onContinuar}
-        className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium"
-      >
+      <Button type="button" onClick={onContinuar}>
         Já tenho tudo — continuar
-      </button>
+      </Button>
     </div>
   );
 }
@@ -176,14 +180,14 @@ function PassoToken({ onVoltar, onContinuar }: { onVoltar: () => void; onContinu
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Como gerar o token permanente</h2>
-      <ol className="list-decimal pl-5 space-y-2 text-sm">
+      <ol className="list-decimal space-y-2 pl-5 text-sm">
         <li>
           Acesse{' '}
           <a
             href="https://developers.facebook.com/apps"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-700 underline"
+            className="font-medium text-primary hover:underline"
           >
             Meta for Developers
           </a>
@@ -198,28 +202,20 @@ function PassoToken({ onVoltar, onContinuar }: { onVoltar: () => void; onContinu
         </li>
         <li>
           Gere um <strong>token permanente</strong> com as permissões{' '}
-          <code className="bg-gray-100 px-1 rounded">whatsapp_business_messaging</code> e{' '}
-          <code className="bg-gray-100 px-1 rounded">whatsapp_business_management</code>.
+          <code className="rounded bg-muted px-1">whatsapp_business_messaging</code> e{' '}
+          <code className="rounded bg-muted px-1">whatsapp_business_management</code>.
         </li>
         <li>
           Copie o token e <strong>guarde em local seguro</strong>. Ele não pode ser visto de novo.
         </li>
       </ol>
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onVoltar}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm"
-        >
+        <Button type="button" variant="outline" onClick={onVoltar}>
           Voltar
-        </button>
-        <button
-          type="button"
-          onClick={onContinuar}
-          className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium"
-        >
+        </Button>
+        <Button type="button" onClick={onContinuar}>
           Tenho o token
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -243,73 +239,69 @@ function PassoDados({
   return (
     <div className="space-y-4">
       <h2 className="text-lg font-semibold">Validação</h2>
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-muted-foreground">
         Cole os IDs e o token. A plataforma valida com a Meta antes de salvar e guarda o
         token criptografado — ele nunca fica visível depois.
       </p>
-      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2">
+      <AlertAviso>
         Use o <strong>token da Meta</strong> (começa com EAA…), não a senha do seu login. Se o
         navegador preencher sozinho, apague e cole o token correto.
-      </p>
+      </AlertAviso>
 
       <Campo label="WABA ID">
-        <input
+        <Input
           value={dados.wabaId}
           onChange={(e) => onChange({ ...dados, wabaId: e.target.value.trim() })}
           placeholder="ex: 123456789012345"
           name="wabaId"
           autoComplete="off"
           inputMode="numeric"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
         />
       </Campo>
 
       <Campo label="Phone Number ID">
-        <input
+        <Input
           value={dados.phoneNumberId}
           onChange={(e) => onChange({ ...dados, phoneNumberId: e.target.value.trim() })}
           placeholder="ex: 987654321012345"
           name="phoneNumberId"
           autoComplete="off"
           inputMode="numeric"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
         />
       </Campo>
 
       <Campo label="Token permanente">
-        <input
+        <Input
           type="password"
           value={dados.token}
           onChange={(e) => onChange({ ...dados, token: e.target.value.trim() })}
           placeholder="EAA..."
           name="metaToken"
           autoComplete="new-password"
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
+          className="font-mono"
         />
       </Campo>
 
-      {erro && (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-          {erro}
-        </p>
-      )}
+      {erro && <AlertErro>{erro}</AlertErro>}
 
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onVoltar}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm"
-        >
+        <Button type="button" variant="outline" onClick={onVoltar}>
           Voltar
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={onContinuar}
           disabled={enviando || !dados.wabaId || !dados.phoneNumberId || !dados.token}
-          className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-60"
         >
-          {enviando ? 'Validando com Meta…' : 'Validar e conectar'}
-        </button>
+          {enviando ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Validando com a Meta…
+            </>
+          ) : (
+            'Validar e conectar'
+          )}
+        </Button>
       </div>
     </div>
   );
@@ -327,48 +319,62 @@ function PassoWebhook({ resultado }: { resultado: ResultadoConexao }) {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-900">
+      <AlertSucesso>
         Conexão validada para <strong>{resultado.displayPhoneNumber}</strong>.
-      </div>
+      </AlertSucesso>
 
       <h2 className="text-lg font-semibold">Configure o webhook na Meta</h2>
-      <p className="text-sm text-gray-600">
+      <p className="text-sm text-muted-foreground">
         Em <em>WhatsApp → Configuration → Webhooks</em>, cole estes valores e ative os campos
-        <code className="bg-gray-100 px-1 rounded ml-1">messages</code> e{' '}
-        <code className="bg-gray-100 px-1 rounded">message_template_status_update</code>.
+        <code className="ml-1 rounded bg-muted px-1">messages</code> e{' '}
+        <code className="rounded bg-muted px-1">message_template_status_update</code>.
       </p>
 
       <Campo label="Callback URL">
         <div className="flex gap-2">
-          <input
-            readOnly
-            value={resultado.webhook.url}
-            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-          />
-          <button
+          <Input readOnly value={resultado.webhook.url} className="flex-1 font-mono" />
+          <Button
             type="button"
+            variant="outline"
             onClick={() => copiar(resultado.webhook.url, 'url')}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="shrink-0 gap-2"
           >
-            {copiou === 'url' ? 'Copiado' : 'Copiar'}
-          </button>
+            {copiou === 'url' ? (
+              <>
+                <Check className="h-4 w-4 text-green-600 dark:text-green-500" />
+                Copiado
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4" />
+                Copiar
+              </>
+            )}
+          </Button>
         </div>
       </Campo>
 
       <Campo label="Verify Token">
         <div className="flex gap-2">
-          <input
-            readOnly
-            value={resultado.webhook.secret}
-            className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm font-mono"
-          />
-          <button
+          <Input readOnly value={resultado.webhook.secret} className="flex-1 font-mono" />
+          <Button
             type="button"
+            variant="outline"
             onClick={() => copiar(resultado.webhook.secret, 'secret')}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="shrink-0 gap-2"
           >
-            {copiou === 'secret' ? 'Copiado' : 'Copiar'}
-          </button>
+            {copiou === 'secret' ? (
+              <>
+                <Check className="h-4 w-4 text-green-600 dark:text-green-500" />
+                Copiado
+              </>
+            ) : (
+              <>
+                <Copy className="h-4 w-4" />
+                Copiar
+              </>
+            )}
+          </Button>
         </div>
       </Campo>
     </div>
@@ -378,8 +384,8 @@ function PassoWebhook({ resultado }: { resultado: ResultadoConexao }) {
 function Campo({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="text-sm font-medium text-gray-900">{label}</span>
-      <div className="mt-1">{children}</div>
+      <span className="text-sm font-medium leading-none">{label}</span>
+      <div className="mt-2">{children}</div>
     </label>
   );
 }

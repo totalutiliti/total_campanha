@@ -39,17 +39,44 @@ export interface BadgeStatus {
   classe: string;
 }
 
-/** Rótulo + classes Tailwind para o status do tenant. */
+/**
+ * Rótulo + classes Tailwind para o status do tenant.
+ * Pares light/dark explícitos (exceção documentada da identidade):
+ * verde=ativo, amarelo=em teste/pendente, vermelho=suspenso/inadimplente,
+ * cinza=cancelado/desconhecido.
+ */
 export function statusTenant(status: string): BadgeStatus {
   switch (status) {
     case 'ATIVO':
-      return { label: 'Ativo', classe: 'bg-green-100 text-green-800' };
+      return {
+        label: 'Ativo',
+        classe: 'bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-400',
+      };
     case 'TRIAL':
-      return { label: 'Em teste', classe: 'bg-amber-100 text-amber-800' };
+      return {
+        label: 'Em teste',
+        classe: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+      };
     case 'SUSPENSO':
-      return { label: 'Suspenso', classe: 'bg-red-100 text-red-800' };
+      return {
+        label: 'Suspenso',
+        classe: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400',
+      };
+    case 'INADIMPLENTE':
+      return {
+        label: 'Inadimplente',
+        classe: 'bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-400',
+      };
+    case 'CANCELADO':
+      return {
+        label: 'Cancelado',
+        classe: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+      };
     default:
-      return { label: status, classe: 'bg-gray-100 text-gray-700' };
+      return {
+        label: status,
+        classe: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+      };
   }
 }
 

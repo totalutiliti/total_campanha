@@ -1,10 +1,15 @@
 'use client';
 
+import { Loader2, Megaphone, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { AlertErro } from '../../../components/ui/alerts';
+import { Badge } from '../../../components/ui/badge';
+import { buttonVariants } from '../../../components/ui/button';
 import { useAuth } from '../../../lib/auth/context';
 import { canalLabel, statusCampanha } from '../../../lib/campanha-status';
+import { cn } from '../../../lib/cn';
 import { mensagemErro } from '../../../lib/erro';
 
 interface Campanha {
@@ -34,33 +39,33 @@ export default function CampanhasListPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 mb-1 flex-wrap">
-        <h1 className="text-2xl font-semibold">Campanhas</h1>
-        <Link
-          href="/campanhas/nova"
-          className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-        >
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold">Campanhas</h1>
+        <Link href="/campanhas/nova" className={cn(buttonVariants(), 'gap-2')}>
+          <Plus className="h-4 w-4" />
           Nova campanha
         </Link>
       </div>
-      <p className="text-xs text-gray-500 mb-4">Envie uma mensagem para um grupo de contatos.</p>
+      <p className="mb-6 text-sm text-muted-foreground">
+        Envie uma mensagem para um grupo de contatos de uma vez.
+      </p>
 
-      {erro && (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3 mb-3">{erro}</p>
-      )}
+      {erro && <AlertErro className="mb-3">{erro}</AlertErro>}
 
       {itens === null ? (
-        <p className="text-sm text-gray-500">carregando…</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando campanhas…
+        </p>
       ) : itens.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-          <p className="text-sm font-medium text-gray-900">Nenhuma campanha ainda.</p>
-          <p className="mt-1 text-sm text-gray-600">
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <Megaphone className="mx-auto h-10 w-10 text-muted-foreground/40" />
+          <p className="mt-3 text-sm font-medium">Nenhuma campanha ainda.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
             Uma campanha junta uma mensagem com um grupo de contatos e dispara.
           </p>
-          <Link
-            href="/campanhas/nova"
-            className="mt-4 inline-block rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700"
-          >
+          <Link href="/campanhas/nova" className={cn(buttonVariants(), 'mt-4 gap-2')}>
+            <Plus className="h-4 w-4" />
             Criar primeira campanha
           </Link>
         </div>
@@ -72,20 +77,23 @@ export default function CampanhasListPage() {
               <li key={c.id}>
                 <Link
                   href={`/campanhas/${c.id}`}
-                  className="block rounded-lg border border-gray-200 bg-white p-3 text-sm hover:border-gray-400 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+                  className="block rounded-lg border bg-card p-3 text-sm text-card-foreground shadow-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium truncate">{c.nome}</div>
-                      <div className="text-xs text-gray-500">
+                      <div className="truncate font-medium">{c.nome}</div>
+                      <div className="text-xs text-muted-foreground">
                         {canalLabel(c.canal)}
                         {c.totalDestinatarios > 0 &&
                           ` · ${c.totalEnviados}/${c.totalDestinatarios} enviados`}
                       </div>
                     </div>
-                    <span className={`shrink-0 text-xs rounded px-2 py-0.5 ${st.classe}`}>
+                    <Badge
+                      variant="outline"
+                      className={cn('shrink-0 border-transparent', st.classe)}
+                    >
                       {st.label}
-                    </span>
+                    </Badge>
                   </div>
                 </Link>
               </li>

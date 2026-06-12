@@ -1,5 +1,5 @@
-import Papa from 'papaparse';
 import { normalizarTelefoneE164 } from '@total-campanha/shared';
+import Papa from 'papaparse';
 
 /**
  * Linhas válidas e relatório de inválidas após parsing/normalização.

@@ -21,25 +21,55 @@ export class InboxService {
 
   /**
    * Lista conversas, opcionalmente filtrando por status (aberta/fechada).
+   * Enriquece com nome/telefone do contato e a última mensagem — é o que a
+   * tela de Respostas mostra na lista.
    */
   async listarConversas(tenantId: string, status?: string) {
-    return this.prisma.runInTenant(tenantId, (tx) =>
-      tx.inboxConversa.findMany({
+    return this.prisma.runInTenant(tenantId, async (tx) => {
+      const conversas = await tx.inboxConversa.findMany({
         where: status ? { status } : {},
         orderBy: { ultimoMsgAt: 'desc' },
-      }),
-    );
+        take: 200,
+      });
+      if (conversas.length === 0) return [];
+
+      const contatos = await tx.contato.findMany({
+        where: { id: { in: conversas.map((c) => c.contatoId) } },
+        select: { id: true, nome: true, telefoneE164: true },
+      });
+      const porId = new Map(contatos.map((c) => [c.id, c]));
+
+      const previas = await Promise.all(
+        conversas.map((c) =>
+          tx.inboxMensagem.findFirst({
+            where: { conversaId: c.id },
+            orderBy: { createdAt: 'desc' },
+            select: { conteudo: true, direcao: true },
+          }),
+        ),
+      );
+
+      return conversas.map((c, i) => ({
+        ...c,
+        contato: porId.get(c.contatoId) ?? null,
+        ultimaMensagem: previas[i],
+      }));
+    });
   }
 
   async listarMensagens(tenantId: string, conversaId: string) {
     return this.prisma.runInTenant(tenantId, async (tx) => {
       const conversa = await tx.inboxConversa.findUnique({ where: { id: conversaId } });
       if (!conversa) throw new NotFoundException('Conversa não encontrada.');
+      const contato = await tx.contato.findUnique({
+        where: { id: conversa.contatoId },
+        select: { id: true, nome: true, telefoneE164: true },
+      });
       const mensagens = await tx.inboxMensagem.findMany({
         where: { conversaId },
         orderBy: { createdAt: 'asc' },
       });
-      return { conversa, mensagens };
+      return { conversa: { ...conversa, contato }, mensagens };
     });
   }
 

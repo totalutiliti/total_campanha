@@ -1,9 +1,14 @@
 'use client';
 
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { AlertErro } from '../../../../components/ui/alerts';
+import { Button, buttonVariants } from '../../../../components/ui/button';
+import { Input } from '../../../../components/ui/input';
+import { Label } from '../../../../components/ui/label';
 import { useAuth } from '../../../../lib/auth/context';
 import { canalLabel } from '../../../../lib/campanha-status';
 import { mensagemErro } from '../../../../lib/erro';
@@ -18,6 +23,9 @@ interface Segmento {
   id: string;
   nome: string;
 }
+
+const SELECT_CLASSES =
+  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
 
 export default function NovaCampanhaPage() {
   const router = useRouter();
@@ -90,25 +98,34 @@ export default function NovaCampanhaPage() {
 
   return (
     <div>
-      <Link href="/campanhas" className="text-xs text-gray-600 hover:text-gray-900">
-        ← Voltar para campanhas
+      <Link
+        href="/campanhas"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para campanhas
       </Link>
-      <h1 className="mt-2 mb-4 text-2xl font-semibold">Nova campanha</h1>
+      <h1 className="mt-2 text-3xl font-bold">Nova campanha</h1>
+      <p className="mb-6 mt-1 text-sm text-muted-foreground">
+        Escolha a mensagem, quem vai receber e quando enviar.
+      </p>
 
-      <form onSubmit={submeter} className="space-y-5 max-w-lg">
-        <label className="block">
-          <span className="text-sm font-medium text-gray-900">Nome da campanha</span>
-          <input
+      <form onSubmit={submeter} className="max-w-lg space-y-5">
+        <div className="space-y-2">
+          <Label htmlFor="nome">Nome da campanha</Label>
+          <Input
+            id="nome"
             value={nome}
             onChange={(e) => setNome(e.target.value)}
             placeholder="Promoção de novembro"
-            className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
           />
-          <span className="mt-1 block text-xs text-gray-500">Só para você identificar — o contato não vê.</span>
-        </label>
+          <p className="text-xs text-muted-foreground">
+            Só para você identificar — o contato não vê.
+          </p>
+        </div>
 
         <fieldset>
-          <legend className="text-sm font-medium text-gray-900 mb-1">Canal</legend>
+          <legend className="mb-2 text-sm font-medium leading-none">Canal</legend>
           <div className="flex gap-4">
             {(['WHATSAPP', 'EMAIL'] as Canal[]).map((c) => (
               <label key={c} className="flex items-center gap-2 text-sm">
@@ -117,7 +134,7 @@ export default function NovaCampanhaPage() {
                   name="canal"
                   checked={canal === c}
                   onChange={() => setCanal(c)}
-                  className="accent-gray-900"
+                  className="h-4 w-4 accent-primary"
                 />
                 <span>{canalLabel(c)}</span>
               </label>
@@ -125,23 +142,27 @@ export default function NovaCampanhaPage() {
           </div>
         </fieldset>
 
-        <label className="block">
-          <span className="text-sm font-medium text-gray-900">Mensagem</span>
+        <div className="space-y-2">
+          <Label htmlFor="template">Mensagem</Label>
           {templates === null ? (
-            <p className="mt-1 text-sm text-gray-500">carregando…</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando…
+            </p>
           ) : templates.length === 0 ? (
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Você ainda não tem mensagem de {canalLabel(canal)}.{' '}
-              <Link href="/templates/novo" className="text-gray-900 underline">
-                Criar um agora
+              <Link href="/templates/novo" className="font-medium text-primary hover:underline">
+                Criar uma agora
               </Link>
               .
             </p>
           ) : (
             <select
+              id="template"
               value={templateId}
               onChange={(e) => setTemplateId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+              className={SELECT_CLASSES}
             >
               <option value="">Selecione…</option>
               {templates.map((t) => (
@@ -151,25 +172,29 @@ export default function NovaCampanhaPage() {
               ))}
             </select>
           )}
-        </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-medium text-gray-900">Quem vai receber (grupo)</span>
+        <div className="space-y-2">
+          <Label htmlFor="segmento">Quem vai receber (grupo)</Label>
           {segmentos === null ? (
-            <p className="mt-1 text-sm text-gray-500">carregando…</p>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Carregando…
+            </p>
           ) : segmentos.length === 0 ? (
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="text-sm text-muted-foreground">
               Você ainda não tem grupos.{' '}
-              <Link href="/segmentos/novo" className="text-gray-900 underline">
+              <Link href="/segmentos/novo" className="font-medium text-primary hover:underline">
                 Criar um agora
               </Link>
               .
             </p>
           ) : (
             <select
+              id="segmento"
               value={segmentoId}
               onChange={(e) => setSegmentoId(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+              className={SELECT_CLASSES}
             >
               <option value="">Selecione…</option>
               {segmentos.map((s) => (
@@ -179,10 +204,10 @@ export default function NovaCampanhaPage() {
               ))}
             </select>
           )}
-          <span className="mt-1 block text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Só recebem os contatos com opt-in para {canalLabel(canal)}.
-          </span>
-        </label>
+          </p>
+        </div>
 
         <div>
           <label className="flex items-center gap-2 text-sm">
@@ -190,44 +215,40 @@ export default function NovaCampanhaPage() {
               type="checkbox"
               checked={agendar}
               onChange={(e) => setAgendar(e.target.checked)}
-              className="accent-gray-900"
+              className="h-4 w-4 rounded accent-primary"
             />
             <span>Agendar para depois</span>
           </label>
           {agendar && (
-            <input
+            <Input
               type="datetime-local"
               value={agendadoPara}
               onChange={(e) => setAgendadoPara(e.target.value)}
-              className="mt-2 rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+              className="mt-2 max-w-xs"
             />
           )}
         </div>
 
-        {erro && (
-          <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-            {erro}
-          </p>
-        )}
+        {erro && <AlertErro>{erro}</AlertErro>}
 
         <div className="flex gap-2">
-          <button
-            type="submit"
-            disabled={salvando}
-            className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
-          >
-            {salvando ? 'Criando…' : 'Criar campanha'}
-          </button>
-          <Link
-            href="/campanhas"
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-          >
+          <Button type="submit" disabled={salvando}>
+            {salvando ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Criando…
+              </>
+            ) : (
+              'Criar campanha'
+            )}
+          </Button>
+          <Link href="/campanhas" className={buttonVariants({ variant: 'outline' })}>
             Cancelar
           </Link>
         </div>
-        <p className="text-xs text-gray-500">
-          Criar não envia nada — você confere o número de destinatários e o custo na próxima tela antes
-          de disparar.
+        <p className="text-xs text-muted-foreground">
+          Criar não envia nada — você confere o número de destinatários e o custo na próxima tela
+          antes de disparar.
         </p>
       </form>
     </div>

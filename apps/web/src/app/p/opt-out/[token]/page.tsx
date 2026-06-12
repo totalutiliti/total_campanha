@@ -1,4 +1,7 @@
+import { AlertErro, AlertSucesso } from '../../../../components/ui/alerts';
+import { Card, CardContent, CardHeader } from '../../../../components/ui/card';
 import { apiGet } from '../../../../lib/api';
+import { mensagemErro } from '../../../../lib/erro';
 
 interface PageProps {
   params: { token: string };
@@ -18,28 +21,42 @@ export default async function OptOutPage({ params }: PageProps) {
   try {
     result = await apiGet<OptOutResposta>(`/p/opt-out/${encodeURIComponent(params.token)}`);
   } catch (e) {
-    erro = e instanceof Error ? e.message : 'Erro inesperado.';
+    erro = mensagemErro(e, 'Link inválido ou expirado.');
   }
 
+  // Página pública do TENANT: o nome da empresa é o título (sem logo da plataforma).
   return (
-    <main className="min-h-screen bg-white text-gray-900 flex items-start justify-center px-4 py-10 sm:py-16">
+    <main className="flex min-h-screen items-start justify-center bg-muted/40 px-4 py-10 sm:py-16">
       <div className="w-full max-w-md">
-        {result ? (
-          <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-            <h1 className="font-medium text-green-900">Pronto!</h1>
-            <p className="text-sm text-green-800 mt-1">
-              Você foi removido da lista de {result.razaoSocial} para o canal{' '}
-              {result.canal === 'EMAIL' ? 'Email' : 'WhatsApp'}.
+        <Card className="shadow-sm">
+          <CardHeader>
+            <h1 className="text-2xl font-semibold leading-tight tracking-tight">
+              {result ? result.razaoSocial : 'Descadastro'}
+            </h1>
+            <p className="text-sm text-muted-foreground">Pedido para não receber mais mensagens</p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {result ? (
+              <AlertSucesso>
+                <p className="text-base font-medium">Pronto!</p>
+                <p className="mt-1">
+                  Você foi removido da lista de {result.razaoSocial} para o canal{' '}
+                  {result.canal === 'EMAIL' ? 'e-mail' : 'WhatsApp'}.
+                </p>
+              </AlertSucesso>
+            ) : (
+              <AlertErro>
+                <p className="text-base font-medium">Não foi possível processar.</p>
+                <p className="mt-1">{erro ?? 'Link inválido ou expirado.'}</p>
+              </AlertErro>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {result
+                ? 'Seu pedido foi registrado conforme a LGPD e vale para o canal indicado acima.'
+                : 'Se o problema continuar, entre em contato com a empresa que enviou a mensagem.'}
             </p>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-4">
-            <h1 className="font-medium text-red-900">Não foi possível processar.</h1>
-            <p className="text-sm text-red-800 mt-1">
-              {erro ?? 'Link inválido ou expirado.'}
-            </p>
-          </div>
-        )}
+          </CardContent>
+        </Card>
       </div>
     </main>
   );

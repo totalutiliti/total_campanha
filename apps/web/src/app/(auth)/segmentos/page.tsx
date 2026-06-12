@@ -1,9 +1,13 @@
 'use client';
 
+import { FolderOpen, Loader2, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { AlertErro } from '../../../components/ui/alerts';
+import { Button, buttonVariants } from '../../../components/ui/button';
 import { useAuth } from '../../../lib/auth/context';
+import { cn } from '../../../lib/cn';
 import { mensagemErro } from '../../../lib/erro';
 
 interface SegmentoItem {
@@ -63,36 +67,34 @@ export default function SegmentosListPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h1 className="text-2xl font-semibold">Grupos</h1>
-        <Link
-          href="/segmentos/novo"
-          className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-        >
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-3xl font-bold">Grupos</h1>
+        <Link href="/segmentos/novo" className={cn(buttonVariants(), 'gap-2')}>
+          <Plus className="h-4 w-4" />
           Novo grupo
         </Link>
       </div>
-      <p className="text-xs text-gray-500 mb-4">Grupos de contatos para mirar nas campanhas.</p>
+      <p className="mb-6 text-sm text-muted-foreground">
+        Grupos de contatos para escolher quem recebe cada campanha.
+      </p>
 
-      {erro && (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3 mb-3">
-          {erro}
-        </p>
-      )}
+      {erro && <AlertErro className="mb-3">{erro}</AlertErro>}
 
       {itens === null ? (
-        <p className="text-sm text-gray-500">carregando…</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando grupos…
+        </p>
       ) : itens.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-          <p className="text-sm font-medium text-gray-900">Nenhum grupo ainda.</p>
-          <p className="mt-1 text-sm text-gray-600">
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/40" />
+          <p className="mt-3 text-sm font-medium">Nenhum grupo ainda.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
             Um grupo reúne contatos (ex.: clientes com opt-in de WhatsApp) para você enviar de uma
             vez.
           </p>
-          <Link
-            href="/segmentos/novo"
-            className="mt-4 inline-block rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700"
-          >
+          <Link href="/segmentos/novo" className={cn(buttonVariants(), 'mt-4 gap-2')}>
+            <Plus className="h-4 w-4" />
             Novo grupo
           </Link>
         </div>
@@ -101,28 +103,40 @@ export default function SegmentosListPage() {
           {itens.map((s) => (
             <li
               key={s.id}
-              className="rounded-lg border border-gray-200 bg-white p-3 text-sm flex items-center justify-between gap-3"
+              className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3 text-sm text-card-foreground shadow-sm transition-colors hover:bg-muted/50"
             >
               <div className="min-w-0">
-                <div className="font-medium truncate">{s.nome}</div>
-                <div className="text-xs text-gray-500">
+                <div className="truncate font-medium">{s.nome}</div>
+                <div className="text-xs text-muted-foreground">
                   Criado em {new Date(s.createdAt).toLocaleDateString('pt-BR')}
                 </div>
               </div>
-              <div className="flex items-center gap-4 shrink-0">
-                <span className="text-xs text-gray-600 tabular-nums">
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-xs text-muted-foreground tabular-nums">
                   {s.id in contagens
                     ? `${contagens[s.id]} contato${contagens[s.id] === 1 ? '' : 's'}`
                     : '…'}
                 </span>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="sm"
                   onClick={() => excluir(s.id, s.nome)}
                   disabled={excluindo === s.id}
-                  className="text-xs text-red-700 hover:underline focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:outline-none rounded disabled:opacity-60"
+                  className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
                 >
-                  {excluindo === s.id ? 'excluindo…' : 'Excluir'}
-                </button>
+                  {excluindo === s.id ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Excluindo…
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4" />
+                      Excluir
+                    </>
+                  )}
+                </Button>
               </div>
             </li>
           ))}

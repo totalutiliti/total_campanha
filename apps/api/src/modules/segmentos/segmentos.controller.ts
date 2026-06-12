@@ -14,11 +14,11 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { Role } from '@total-campanha/shared';
 
-import { CurrentUser } from '../auth/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { Roles } from '../../common/rbac/roles.decorator.js';
 import { TenantRoleGuard } from '../../common/rbac/tenant-role.guard.js';
 import { TenantId } from '../../common/tenant/tenant-id.decorator.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/jwt-payload.type.js';
 
 import { AtualizarSegmentoDto } from './dto/atualizar-segmento.dto.js';

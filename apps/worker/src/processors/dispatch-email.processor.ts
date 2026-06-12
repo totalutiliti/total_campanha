@@ -4,14 +4,15 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@total-campanha/db';
 import type { Job } from 'bullmq';
 
-import { CUSTO_REFERENCIA, UsageService } from '../common/usage.service.js';
 import { MailService } from '../common/mail.service.js';
+import { OptOutTokenService } from '../common/opt-out-token.service.js';
 import { PrismaService } from '../common/prisma.service.js';
 import {
   renderizarAssunto,
   renderizarEmail,
   variaveisDoContato,
 } from '../common/render.js';
+import { CUSTO_REFERENCIA, UsageService } from '../common/usage.service.js';
 
 interface DispatchJob {
   mensagemId: string;
@@ -35,6 +36,7 @@ export class DispatchEmailProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
     private readonly usage: UsageService,
+    private readonly optOutToken: OptOutTokenService,
   ) {
     super();
     this.optOutBaseUrl =
@@ -44,9 +46,24 @@ export class DispatchEmailProcessor extends WorkerHost {
   async process(job: Job<DispatchJob>): Promise<void> {
     const { mensagemId, tenantId, campanhaId } = job.data;
 
+    // Defesa em profundidade (RULES 6): tenant suspenso/inadimplente não envia,
+    // mesmo com jobs já enfileirados. A mensagem é cancelada com motivo claro.
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { status: true },
+    });
+    if (!tenant || (tenant.status !== 'ATIVO' && tenant.status !== 'TRIAL')) {
+      await this.cancelarPorConta(tenantId, mensagemId, tenant?.status ?? 'INEXISTENTE');
+      return;
+    }
+
     const ctx = await this.prisma.runInTenant(tenantId, async (tx) => {
       const mensagem = await tx.mensagem.findUnique({ where: { id: mensagemId } });
-      if (!mensagem || mensagem.status === 'CANCELADA') return null;
+      // Idempotência (at-least-once do BullMQ + reconciliação): só processa
+      // mensagem que ainda está aguardando envio.
+      if (!mensagem || (mensagem.status !== 'PENDENTE' && mensagem.status !== 'ENFILEIRADA')) {
+        return null;
+      }
 
       const campanha = await tx.campanha.findUnique({ where: { id: campanhaId } });
       if (!campanha) return null;
@@ -93,17 +110,27 @@ export class DispatchEmailProcessor extends WorkerHost {
       return;
     }
 
-    const variaveis = variaveisDoContato({
-      nome: contato.nome,
-      email: contato.email,
-      telefoneE164: contato.telefoneE164,
-      extras: (contato.extras as Record<string, unknown>) ?? {},
-    });
+    // Token HMAC real de opt-out one-click (RULES 5.2/LGPD) — verificado pela
+    // API em /p/opt-out/:token. Disponível no template como {{opt_out_url}}.
+    const optOutUrl = `${this.optOutBaseUrl}/${this.optOutToken.emitir(
+      tenantId,
+      contato.id,
+      'EMAIL',
+    )}`;
+
+    const variaveis = {
+      ...variaveisDoContato({
+        nome: contato.nome,
+        email: contato.email,
+        telefoneE164: contato.telefoneE164,
+        extras: (contato.extras as Record<string, unknown>) ?? {},
+      }),
+      opt_out_url: optOutUrl,
+    };
 
     try {
-      const html = renderizarEmail(template.mjml, variaveis);
+      const html = comRodapeOptOut(renderizarEmail(template.mjml, variaveis), optOutUrl);
       const assunto = renderizarAssunto(template.assunto ?? '(sem assunto)', variaveis);
-      const optOutUrl = `${this.optOutBaseUrl}/placeholder-token`; // token real virá com tracking (Fase 6)
 
       await this.mail.enviar({
         to: contato.email,
@@ -167,4 +194,34 @@ export class DispatchEmailProcessor extends WorkerHost {
       });
     });
   }
+
+  private async cancelarPorConta(
+    tenantId: string,
+    mensagemId: string,
+    statusConta: string,
+  ): Promise<void> {
+    this.logger.warn({ msg: 'dispatch_bloqueado_status_conta', tenantId, mensagemId, statusConta });
+    await this.prisma.runInTenant(tenantId, async (tx) => {
+      await tx.mensagem.updateMany({
+        where: { id: mensagemId, status: { in: ['PENDENTE', 'ENFILEIRADA'] } },
+        data: { status: 'CANCELADA', falhaMotivo: `Conta ${statusConta} — envio bloqueado.` },
+      });
+    });
+  }
+}
+
+/**
+ * Injeta o rodapé de descadastro antes do </body>. Todo email de campanha sai
+ * com link de opt-out one-click visível (RULES 5.2 / LGPD), independente do
+ * template do tenant usar {{opt_out_url}} ou não.
+ */
+function comRodapeOptOut(html: string, optOutUrl: string): string {
+  const rodape =
+    `<div style="max-width:600px;margin:16px auto 0;padding:12px 16px;text-align:center;` +
+    `font-family:Arial,Helvetica,sans-serif;font-size:11px;line-height:1.5;color:#64748B;">` +
+    `Você recebeu este e-mail porque aceitou receber novidades. ` +
+    `<a href="${optOutUrl}" style="color:#64748B;text-decoration:underline;">` +
+    `Não quero mais receber estes e-mails</a>.</div>`;
+  if (html.includes('</body>')) return html.replace('</body>', `${rodape}</body>`);
+  return html + rodape;
 }

@@ -4,9 +4,9 @@ import { Injectable, NotFoundException, ConflictException, Logger } from '@nestj
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@total-campanha/db';
 
-import { env } from '../../config/config.module.js';
 import { AuditService } from '../../common/audit/audit.service.js';
 import { PrismaService, PrismaTx } from '../../common/prisma/prisma.service.js';
+import { env } from '../../config/config.module.js';
 
 import { AtualizarContatoDto } from './dto/atualizar-contato.dto.js';
 import { CriarContatoDto } from './dto/criar-contato.dto.js';
