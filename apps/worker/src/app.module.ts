@@ -1,12 +1,13 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { BullModule } from '@nestjs/bullmq';
 
-import { loadEnv } from './config/env.js';
 import { CryptoService } from './common/crypto.service.js';
 import { MailService } from './common/mail.service.js';
+import { OptOutTokenService } from './common/opt-out-token.service.js';
 import { PrismaService } from './common/prisma.service.js';
 import { UsageService } from './common/usage.service.js';
+import { loadEnv } from './config/env.js';
 import { MetaWhatsappClient } from './integrations/meta-whatsapp.client.js';
 import { WorkerSesIdentityClient } from './integrations/ses-identity.client.js';
 import { DispatchEmailProcessor } from './processors/dispatch-email.processor.js';
@@ -52,6 +53,7 @@ import { WebhookMetaProcessor } from './processors/webhook-meta.processor.js';
     PrismaService,
     CryptoService,
     MailService,
+    OptOutTokenService,
     UsageService,
     MetaWhatsappClient,
     WorkerSesIdentityClient,

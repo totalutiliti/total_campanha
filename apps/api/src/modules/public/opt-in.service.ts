@@ -3,9 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@total-campanha/db';
 import type { Canal } from '@total-campanha/db';
 
-import { env } from '../../config/config.module.js';
 import { MailService } from '../../common/mail/mail.service.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { env } from '../../config/config.module.js';
 
 import { OptInDto } from './dto/opt-in.dto.js';
 import { OptOutTokenService } from './opt-out-token.service.js';

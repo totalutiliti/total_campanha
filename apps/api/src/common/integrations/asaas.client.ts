@@ -74,8 +74,28 @@ export class AsaasClient {
       status: sub.status,
       valor: sub.value,
       proximoVencimento: sub.nextDueDate,
-      linkPagamento: null,
+      // A subscription gera a 1ª cobrança em seguida; o link vem dela.
+      linkPagamento: await this.linkPagamento(sub.id),
     };
+  }
+
+  /**
+   * URL de pagamento da cobrança mais recente da subscription (invoiceUrl).
+   * É o que o assinante abre para pagar — sem isso o ciclo não fecha.
+   */
+  async linkPagamento(subscriptionId: string): Promise<string | null> {
+    if (this.modoStub) return 'https://sandbox.asaas.com/stub-checkout';
+    try {
+      const r = await this.request<{ data?: Array<{ invoiceUrl?: string; status?: string }> }>(
+        'GET',
+        `/subscriptions/${subscriptionId}/payments?limit=1`,
+      );
+      return r.data?.[0]?.invoiceUrl ?? null;
+    } catch (err) {
+      // A 1ª cobrança pode ainda não existir logo após criar a subscription.
+      this.logger.warn({ msg: 'asaas_link_pagamento_indisponivel', subscriptionId, err });
+      return null;
+    }
   }
 
   async atualizarValor(subscriptionId: string, valorMensal: number): Promise<void> {

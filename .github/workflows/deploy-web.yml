@@ -27,6 +27,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # Blindagem (CLAUDE.md): deploy de PROD SÓ a partir da main.
+      - name: Guarda de ref (só main)
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Deploy de PROD só a partir da main (ref atual: $GITHUB_REF)."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Setup pnpm
@@ -42,6 +50,9 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm --filter @total-campanha/db generate
 
       - name: Lint & typecheck
         run: |
@@ -83,14 +94,21 @@ jobs:
           echo "web health check falhou"
           exit 1
 
+      # LIÇÃO L08 (aba sumida pós-deploy de web): o smoke roda também aqui,
+      # não só no deploy da API.
+      - name: Smoke test
+        run: bash scripts/smoke-test-prod.sh
+
       - name: Rollback on failure
         if: failure()
         run: |
+          # Apps usam activeRevisionsMode=Single — rollback é reativar a
+          # revision anterior (traffic-split exige modo Multiple).
           PREV=$(az containerapp revision list -g $RG -n $APP \
-            --query "[?properties.active] | sort_by(@, &properties.createdTime) | [-2].name" -o tsv)
+            --query "sort_by(@, &properties.createdTime) | [-2].name" -o tsv)
           if [ -n "$PREV" ]; then
-            echo "Rollback para $PREV"
-            az containerapp ingress traffic set -g $RG -n $APP --revision-weight "$PREV=100"
+            echo "Rollback (ativando revision $PREV)"
+            az containerapp revision activate -g $RG -n $APP --revision "$PREV"
           fi
 
       - name: Notify Slack

@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -42,10 +43,17 @@ export default function NovoContatoPage() {
 
   return (
     <div>
-      <Link href="/contatos" className="text-xs text-gray-600 hover:text-gray-900">
-        ← Voltar para contatos
+      <Link
+        href="/contatos"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para contatos
       </Link>
-      <h1 className="mt-2 mb-4 text-2xl font-semibold">Adicionar contato</h1>
+      <h1 className="mt-2 text-3xl font-bold">Adicionar contato</h1>
+      <p className="mb-6 mt-1 text-sm text-muted-foreground">
+        Cadastre um cliente com e-mail ou telefone para ele poder receber campanhas.
+      </p>
       <ContatoForm
         salvando={salvando}
         erroServidor={erro}

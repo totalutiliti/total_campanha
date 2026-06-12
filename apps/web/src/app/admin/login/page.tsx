@@ -1,9 +1,18 @@
 'use client';
 
+import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { LogoTotal } from '../../../components/logo-total';
+import { AlertErro } from '../../../components/ui/alerts';
+import { Button } from '../../../components/ui/button';
+import { Card, CardContent, CardHeader } from '../../../components/ui/card';
+import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { PasswordInput } from '../../../components/ui/password-input';
 import { useAdminAuth } from '../../../lib/admin/context';
+import { mensagemErro } from '../../../lib/erro';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -27,63 +36,71 @@ export default function AdminLoginPage() {
       await login(email, senha);
       // 'autenticado' → o useEffect acima redireciona.
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'E-mail ou senha incorretos.');
+      setErro(mensagemErro(err, 'E-mail ou senha incorretos.'));
     } finally {
       setEnviando(false);
     }
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
-      <div className="w-full max-w-sm bg-white rounded-lg border border-gray-200 p-6 shadow-xl">
-        <header className="mb-5">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Total Campanha
-          </p>
-          <h1 className="text-xl font-semibold">Painel Super Admin</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Acesso restrito à operação da plataforma.
-          </p>
-        </header>
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 to-blue-50 dark:from-slate-950 dark:to-slate-900">
+      <div className="w-full max-w-md px-4">
+        <Card className="border-0 shadow-xl">
+          <CardHeader className="space-y-4 pb-2">
+            <div className="flex flex-col items-center gap-3">
+              <LogoTotal className="h-10 w-auto mx-auto" />
+              <div className="text-center">
+                <h1 className="text-xl font-semibold tracking-tight">Painel Super Admin</h1>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Acesso restrito à operação da plataforma.
+                </p>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={aoSubmeter} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">E-mail</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="seu@email.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="senha">Senha</Label>
+                <PasswordInput
+                  id="senha"
+                  autoComplete="current-password"
+                  placeholder="••••••••"
+                  value={senha}
+                  onChange={(e) => setSenha(e.target.value)}
+                  required
+                />
+              </div>
 
-        <form onSubmit={aoSubmeter} className="space-y-3">
-          <label className="block">
-            <span className="text-sm font-medium text-gray-900">E-mail</span>
-            <input
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-            />
-          </label>
-          <label className="block">
-            <span className="text-sm font-medium text-gray-900">Senha</span>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={senha}
-              onChange={(e) => setSenha(e.target.value)}
-              required
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-            />
-          </label>
+              {erro && <AlertErro>{erro}</AlertErro>}
 
-          {erro && (
-            <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-2">
-              {erro}
+              <Button type="submit" className="w-full" disabled={enviando}>
+                {enviando ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Entrando...
+                  </>
+                ) : (
+                  'Entrar'
+                )}
+              </Button>
+            </form>
+            <p className="mt-6 text-center text-xs text-muted-foreground">
+              Total Campanha — ferramenta interna de operação
             </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={enviando}
-            className="w-full rounded-md bg-gray-900 text-white py-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-          >
-            {enviando ? 'Entrando…' : 'Entrar'}
-          </button>
-        </form>
+          </CardContent>
+        </Card>
       </div>
     </main>
   );

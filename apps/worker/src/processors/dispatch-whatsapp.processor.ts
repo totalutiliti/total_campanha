@@ -4,9 +4,9 @@ import { Prisma } from '@total-campanha/db';
 import type { Job } from 'bullmq';
 
 import { CryptoService } from '../common/crypto.service.js';
-import { CUSTO_REFERENCIA, UsageService } from '../common/usage.service.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { resolverVariaveisWhatsapp } from '../common/render.js';
+import { CUSTO_REFERENCIA, UsageService } from '../common/usage.service.js';
 import { MetaApiError, MetaWhatsappClient } from '../integrations/meta-whatsapp.client.js';
 
 interface DispatchJob {
@@ -44,9 +44,38 @@ export class DispatchWhatsappProcessor extends WorkerHost {
   async process(job: Job<DispatchJob>): Promise<void> {
     const { mensagemId, tenantId, campanhaId } = job.data;
 
+    // Defesa em profundidade (RULES 6): tenant suspenso/inadimplente não envia
+    // — cada mensagem WhatsApp custa dinheiro real na Meta.
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { status: true },
+    });
+    if (!tenant || (tenant.status !== 'ATIVO' && tenant.status !== 'TRIAL')) {
+      this.logger.warn({
+        msg: 'dispatch_bloqueado_status_conta',
+        tenantId,
+        mensagemId,
+        statusConta: tenant?.status ?? 'INEXISTENTE',
+      });
+      await this.prisma.runInTenant(tenantId, async (tx) => {
+        await tx.mensagem.updateMany({
+          where: { id: mensagemId, status: { in: ['PENDENTE', 'ENFILEIRADA'] } },
+          data: {
+            status: 'CANCELADA',
+            falhaMotivo: `Conta ${tenant?.status ?? 'INEXISTENTE'} — envio bloqueado.`,
+          },
+        });
+      });
+      return;
+    }
+
     const ctx = await this.prisma.runInTenant(tenantId, async (tx) => {
       const mensagem = await tx.mensagem.findUnique({ where: { id: mensagemId } });
-      if (!mensagem || mensagem.status === 'CANCELADA') return null;
+      // Idempotência (at-least-once do BullMQ + reconciliação): só processa
+      // mensagem que ainda está aguardando envio.
+      if (!mensagem || (mensagem.status !== 'PENDENTE' && mensagem.status !== 'ENFILEIRADA')) {
+        return null;
+      }
 
       const campanha = await tx.campanha.findUnique({ where: { id: campanhaId } });
       if (!campanha) return null;

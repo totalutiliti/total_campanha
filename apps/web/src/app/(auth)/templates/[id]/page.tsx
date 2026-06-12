@@ -1,10 +1,13 @@
 'use client';
 
+import { ArrowLeft, Eye, Loader2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { TemplateForm, TemplatePayload, Variavel } from '../../../../components/templates/template-form';
+import { AlertErro } from '../../../../components/ui/alerts';
+import { Button } from '../../../../components/ui/button';
 import { useAuth } from '../../../../lib/auth/context';
 import { mensagemErro } from '../../../../lib/erro';
 
@@ -106,19 +109,32 @@ export default function EditarTemplatePage() {
 
   return (
     <div>
-      <Link href="/templates" className="text-xs text-gray-600 hover:text-gray-900">
-        ← Voltar para mensagens
+      <Link
+        href="/templates"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para mensagens
       </Link>
-      <h1 className="mt-2 mb-4 text-2xl font-semibold">Editar mensagem</h1>
+      <h1 className="mt-2 text-3xl font-bold">Editar mensagem</h1>
+      <p className="mb-6 mt-1 text-sm text-muted-foreground">
+        Ajuste o texto e confira a pré-visualização antes de usar em uma campanha.
+      </p>
 
       {carregando ? (
-        <p className="text-sm text-gray-500">carregando…</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando mensagem…
+        </p>
       ) : erroCarga ? (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">{erroCarga}</p>
+        <AlertErro>{erroCarga}</AlertErro>
       ) : template ? (
         <>
-          <p className="text-sm text-gray-600 mb-4">
-            Canal: <strong>{template.canal === 'EMAIL' ? 'E-mail' : 'WhatsApp'}</strong>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Canal:{' '}
+            <strong className="text-foreground">
+              {template.canal === 'EMAIL' ? 'E-mail' : 'WhatsApp'}
+            </strong>
           </p>
 
           <TemplateForm
@@ -129,68 +145,67 @@ export default function EditarTemplatePage() {
             textoBotao="Salvar alterações"
             onSalvar={salvar}
             rodape={
-              <button
-                type="button"
-                onClick={previsualizar}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-              >
+              <Button type="button" variant="outline" onClick={previsualizar} className="gap-2">
+                <Eye className="h-4 w-4" />
                 Pré-visualizar
-              </button>
+              </Button>
             }
           />
 
-          {previewErro && (
-            <p className="mt-4 max-w-2xl text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-              {previewErro}
-            </p>
-          )}
+          {previewErro && <AlertErro className="mt-4 max-w-2xl">{previewErro}</AlertErro>}
 
           {preview && (
             <div className="mt-6 max-w-2xl">
-              <h2 className="text-sm font-medium text-gray-900 mb-2">Pré-visualização (com exemplos)</h2>
-              <p className="text-xs text-gray-500 mb-2">
+              <h2 className="mb-2 text-sm font-medium">Pré-visualização (com exemplos)</h2>
+              <p className="mb-2 text-xs text-muted-foreground">
                 Mostra a versão salva. Salve antes para ver as últimas alterações.
               </p>
               {preview.canal === 'EMAIL' ? (
                 <div>
-                  <div className="text-xs text-gray-600 mb-1">
-                    Assunto: <strong>{preview.assunto}</strong>
+                  <div className="mb-1 text-xs text-muted-foreground">
+                    Assunto: <strong className="text-foreground">{preview.assunto}</strong>
                   </div>
                   <iframe
                     title="Pré-visualização do e-mail"
                     srcDoc={preview.html}
                     sandbox=""
-                    className="w-full h-96 rounded-md border border-gray-200 bg-white"
+                    className="h-96 w-full rounded-md border bg-white"
                   />
                 </div>
               ) : (
-                <div className="rounded-md border border-gray-200 bg-white p-4 text-sm">
+                <div className="rounded-lg border bg-card p-4 text-sm text-card-foreground shadow-sm">
                   <div>
                     Template Meta: <strong>{preview.metaTemplateName}</strong> ({preview.metaLanguage})
                   </div>
                   {Object.keys(preview.variaveisAplicadas).length > 0 && (
-                    <div className="mt-2 text-xs text-gray-600">
+                    <div className="mt-2 text-xs text-muted-foreground">
                       Variáveis: {Object.entries(preview.variaveisAplicadas).map(([k, v]) => `${k}=${v}`).join(', ')}
                     </div>
                   )}
-                  <p className="mt-2 text-xs text-gray-500">
-                    O texto real do WhatsApp é o aprovado na Meta — aqui mostramos só a referência e os
-                    exemplos das variáveis.
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    O texto real do WhatsApp é o aprovado na Meta — aqui mostramos só a referência e
+                    os exemplos das variáveis.
                   </p>
                 </div>
               )}
             </div>
           )}
 
-          <div className="mt-10 max-w-2xl rounded-md border border-red-200 bg-red-50/40 p-4">
-            <h2 className="text-sm font-medium text-red-800">Excluir mensagem</h2>
-            <button
+          <div className="mt-10 max-w-2xl rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <h2 className="text-sm font-semibold text-destructive">Excluir mensagem</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Campanhas que já usaram esta mensagem não são afetadas.
+            </p>
+            <Button
               type="button"
+              variant="destructive"
+              size="sm"
               onClick={excluir}
-              className="mt-2 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:outline-none"
+              className="mt-3"
             >
+              <Trash2 className="mr-2 h-4 w-4" />
               Excluir mensagem
-            </button>
+            </Button>
           </div>
         </>
       ) : null}

@@ -64,6 +64,9 @@ export const EnvSchema = z.object({
   // URLs públicas para construir links em emails
   PUBLIC_OPT_IN_BASE_URL: z.string().url().default('http://localhost:3000/p/opt-in'),
   PUBLIC_OPT_OUT_BASE_URL: z.string().url().default('http://localhost:3000/p/opt-out'),
+  // Base do app web (links de redefinição de senha etc). Se ausente, derivamos
+  // a origem de PUBLIC_OPT_IN_BASE_URL.
+  WEB_BASE_URL: z.string().url().optional(),
 
   // Webhooks Meta — URL pública onde a Meta envia eventos por tenant.
   // Em PROD: https://api.totalcampanha.com.br/api/v1/webhooks/meta/{tenantSlug}
@@ -94,5 +97,15 @@ export function loadEnv(raw: NodeJS.ProcessEnv): Env {
       .join('\n');
     throw new Error(`[env] variáveis inválidas:\n${detalhe}`);
   }
-  return parsed.data;
+  const env = parsed.data;
+  // Validações cruzadas — configurações que, ausentes, falhariam só em runtime.
+  if (env.MAIL_PROVIDER === 'ses' && (!env.AWS_ACCESS_KEY_ID || !env.AWS_SECRET_ACCESS_KEY)) {
+    throw new Error('[env] MAIL_PROVIDER=ses exige AWS_ACCESS_KEY_ID e AWS_SECRET_ACCESS_KEY.');
+  }
+  if (env.ASAAS_API_KEY && !env.ASAAS_WEBHOOK_TOKEN) {
+    throw new Error(
+      '[env] ASAAS_API_KEY configurada sem ASAAS_WEBHOOK_TOKEN — o webhook de billing ficaria aberto.',
+    );
+  }
+  return env;
 }

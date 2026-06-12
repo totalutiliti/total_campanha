@@ -6,17 +6,20 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Role } from '@total-campanha/shared';
 
+import { MailService } from '../../common/mail/mail.service.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { env } from '../../config/config.module.js';
 import { UsersService } from '../users/users.service.js';
 
+import type { LoginDto } from './dto/login.dto.js';
+import type { SignupDto } from './dto/signup.dto.js';
 import { EmailHashService } from './email-hash.service.js';
 import { PasswordService } from './password.service.js';
 import { TokenService } from './token.service.js';
 import { TotpService } from './totp.service.js';
-import type { SignupDto } from './dto/signup.dto.js';
-import type { LoginDto } from './dto/login.dto.js';
 
 const ERR_LOGIN_GENERICO = 'Email ou senha incorretos.';
 
@@ -33,6 +36,8 @@ export interface ResultadoAuth {
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  private readonly webBaseUrl: string;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly users: UsersService,
@@ -40,7 +45,16 @@ export class AuthService {
     private readonly emailHash: EmailHashService,
     private readonly tokens: TokenService,
     private readonly totp: TotpService,
-  ) {}
+    private readonly mail: MailService,
+    config: ConfigService,
+  ) {
+    // Base do app web para links em emails. Sem WEB_BASE_URL, deriva a origem
+    // de PUBLIC_OPT_IN_BASE_URL (ex.: https://app.x.com.br/p/opt-in → https://app.x.com.br).
+    const explicita = env(config, 'WEB_BASE_URL');
+    this.webBaseUrl = explicita
+      ? explicita.replace(/\/$/, '')
+      : new URL(env(config, 'PUBLIC_OPT_IN_BASE_URL')).origin;
+  }
 
   // ---------------------------------------------------------------
   // Signup — cria Tenant + primeiro User ADMIN.
@@ -252,9 +266,37 @@ export class AuthService {
       return { token: null };
     }
     const token = await this.tokens.emitirResetToken(user.id);
-    // Envio do email com link de reset entra na Fase 2 (MailService).
-    // No MVP retornamos o token para que o teste/dev possa concluir o fluxo.
+
+    // Envia o link de redefinição. Falha de email NÃO vaza para o cliente
+    // (resposta segue genérica) — só registramos para diagnóstico.
+    const url = `${this.webBaseUrl}/redefinir-senha?token=${encodeURIComponent(token)}`;
+    try {
+      await this.mail.enviar({
+        to: user.email,
+        subject: 'Redefinição de senha — Total Campanha',
+        html: emailRedefinicaoHtml(url),
+        text: `Recebemos um pedido para redefinir sua senha no Total Campanha.\n\nAbra este link para criar uma senha nova (válido por 1 hora):\n${url}\n\nSe não foi você, ignore este e-mail — nada muda.`,
+      });
+    } catch (err) {
+      this.logger.error({ msg: 'forgot_envio_email_falhou', err });
+    }
     return { token };
+  }
+
+  // ---------------------------------------------------------------
+  // Troca de senha autenticada (Minha conta)
+  // ---------------------------------------------------------------
+  async trocarSenha(userId: string, senhaAtual: string, novaSenha: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException();
+
+    const confere = await this.password.verify(user.passwordHash, senhaAtual);
+    if (!confere) throw new BadRequestException('Senha atual incorreta.');
+
+    const passwordHash = await this.password.hash(novaSenha);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    // Invalida as outras sessões — a atual continua até o access token expirar.
+    await this.tokens.invalidarTodasSessoes(userId);
   }
 
   async reset(token: string, novaSenha: string): Promise<void> {
@@ -311,4 +353,17 @@ export class AuthService {
       refresh: { token: refresh.token, ttlSeconds: this.tokens.refreshTtlSeconds() },
     };
   }
+}
+
+/** Email transacional de redefinição — HTML simples, sem dependência de MJML. */
+function emailRedefinicaoHtml(url: string): string {
+  return (
+    `<div style="max-width:480px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#020817;">` +
+    `<h2 style="font-size:20px;margin:24px 0 8px;">Redefinir sua senha</h2>` +
+    `<p style="font-size:14px;line-height:1.6;color:#334155;">Recebemos um pedido para redefinir a senha da sua conta no <strong>Total Campanha</strong>. Clique no botão abaixo para criar uma senha nova. O link vale por 1 hora.</p>` +
+    `<p style="margin:24px 0;"><a href="${url}" style="display:inline-block;background:#2563EB;color:#F8FAFC;text-decoration:none;font-size:14px;font-weight:600;padding:12px 24px;border-radius:6px;">Criar senha nova</a></p>` +
+    `<p style="font-size:12px;line-height:1.6;color:#64748B;">Se o botão não funcionar, copie e cole este endereço no navegador:<br/><a href="${url}" style="color:#2563EB;word-break:break-all;">${url}</a></p>` +
+    `<p style="font-size:12px;line-height:1.6;color:#64748B;">Se você não pediu isso, pode ignorar este e-mail — sua senha continua a mesma.</p>` +
+    `</div>`
+  );
 }

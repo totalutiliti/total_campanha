@@ -2,10 +2,10 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { Role } from '@total-campanha/shared';
 
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { Roles } from '../../common/rbac/roles.decorator.js';
 import { TenantRoleGuard } from '../../common/rbac/tenant-role.guard.js';
 import { TenantId } from '../../common/tenant/tenant-id.decorator.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 
 import { AnalyticsService } from './analytics.service.js';
 

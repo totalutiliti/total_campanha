@@ -14,20 +14,20 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { Role } from '@total-campanha/shared';
 
-import { CurrentUser } from '../auth/current-user.decorator.js';
-import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import { Roles } from '../../common/rbac/roles.decorator.js';
 import { TenantRoleGuard } from '../../common/rbac/tenant-role.guard.js';
 import { TenantId } from '../../common/tenant/tenant-id.decorator.js';
+import { CurrentUser } from '../auth/current-user.decorator.js';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
 import type { AuthenticatedUser } from '../auth/jwt-payload.type.js';
 
-import { AtualizarTemplateDto } from './dto/atualizar-template.dto.js';
 import { BibliotecaService } from './biblioteca/biblioteca.service.js';
+import { AtualizarTemplateDto } from './dto/atualizar-template.dto.js';
 import { CriarTemplateDto } from './dto/criar-template.dto.js';
-import { MetaTemplatesService } from './whatsapp/meta-templates.service.js';
 import { PreviewTemplateDto } from './dto/preview-template.dto.js';
-import { TemplatesService } from './templates.service.js';
 import { TesteEnvioDto } from './dto/teste-envio.dto.js';
+import { TemplatesService } from './templates.service.js';
+import { MetaTemplatesService } from './whatsapp/meta-templates.service.js';
 
 @ApiTags('templates')
 @Controller('templates')

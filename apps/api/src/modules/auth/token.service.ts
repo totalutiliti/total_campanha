@@ -4,8 +4,8 @@ import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 
-import { env } from '../../config/config.module.js';
 import { RedisService } from '../../common/redis/redis.service.js';
+import { env } from '../../config/config.module.js';
 
 import type {
   AccessTokenPayload,

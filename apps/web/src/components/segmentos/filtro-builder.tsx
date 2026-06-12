@@ -1,6 +1,10 @@
 'use client';
 
+import { Loader2, Plus, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
+
+import { cn } from '../../lib/cn';
+import { Button } from '../ui/button';
 
 import {
   CamposPermitidos,
@@ -16,6 +20,9 @@ interface Props {
   valor: Grupo;
   onChange: (g: Grupo) => void;
 }
+
+const CONTROLE_CLASSES =
+  'h-9 rounded-md border border-input bg-background px-2 py-1 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
 /**
  * FiltroBuilder recursivo (BOOTSTRAP 3.1).
@@ -40,7 +47,7 @@ function RenderGrupo({
   onChange: (g: Grupo) => void;
   nivel: number;
 }) {
-  const fundoNivel = nivel === 0 ? 'bg-gray-50' : nivel % 2 ? 'bg-white' : 'bg-gray-50';
+  const fundoNivel = nivel === 0 ? 'bg-muted/40' : nivel % 2 ? 'bg-card' : 'bg-muted/40';
 
   function atualizarFilho(idx: number, novo: Grupo | Condicao) {
     const novos = grupo.condicoes.slice();
@@ -76,10 +83,10 @@ function RenderGrupo({
   }
 
   return (
-    <div className={`rounded-md border border-gray-200 p-3 ${fundoNivel}`}>
-      <div className="flex items-center gap-2 mb-2">
+    <div className={cn('rounded-md border p-3', fundoNivel)}>
+      <div className="mb-2 flex items-center gap-2">
         <ModoToggle modo={grupo.modo} onChange={trocarModo} />
-        <span className="text-xs text-gray-500">
+        <span className="text-xs text-muted-foreground">
           {grupo.condicoes.length} condição{grupo.condicoes.length === 1 ? '' : 'es'}
         </span>
       </div>
@@ -95,49 +102,48 @@ function RenderGrupo({
                   nivel={nivel + 1}
                 />
               </div>
-              <button
-                type="button"
-                onClick={() => removerFilho(i)}
-                className="text-xs text-red-700 hover:underline self-start"
-              >
-                remover
-              </button>
+              <BotaoRemover onClick={() => removerFilho(i)} className="self-start" />
             </div>
           ) : (
-            <div key={i} className="flex gap-2 items-center">
+            <div key={i} className="flex items-center gap-2">
               <RenderCondicao
                 condicao={filho}
                 onChange={(c) => atualizarFilho(i, c)}
               />
-              <button
-                type="button"
-                onClick={() => removerFilho(i)}
-                className="text-xs text-red-700 hover:underline"
-              >
-                remover
-              </button>
+              <BotaoRemover onClick={() => removerFilho(i)} />
             </div>
           ),
         )}
       </div>
 
-      <div className="mt-3 flex gap-2 text-sm">
-        <button
-          type="button"
-          onClick={adicionarCondicao}
-          className="rounded-md border border-gray-300 px-3 py-1 hover:bg-white"
-        >
-          + Condição
-        </button>
-        <button
-          type="button"
-          onClick={adicionarGrupo}
-          className="rounded-md border border-gray-300 px-3 py-1 hover:bg-white"
-        >
-          + Grupo
-        </button>
+      <div className="mt-3 flex gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={adicionarCondicao} className="gap-1">
+          <Plus className="h-4 w-4" />
+          Condição
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={adicionarGrupo} className="gap-1">
+          <Plus className="h-4 w-4" />
+          Grupo
+        </Button>
       </div>
     </div>
+  );
+}
+
+function BotaoRemover({ onClick, className }: { onClick: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title="Remover"
+      className={cn(
+        'inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-destructive transition-colors hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        className,
+      )}
+    >
+      <X className="h-3.5 w-3.5" />
+      Remover
+    </button>
   );
 }
 
@@ -149,18 +155,28 @@ function ModoToggle({
   onChange: (m: 'and' | 'or') => void;
 }) {
   return (
-    <div className="inline-flex rounded-md border border-gray-300 overflow-hidden text-xs">
+    <div className="inline-flex overflow-hidden rounded-md border border-input text-xs">
       <button
         type="button"
         onClick={() => onChange('and')}
-        className={`px-2 py-1 ${modo === 'and' ? 'bg-gray-900 text-white' : 'bg-white'}`}
+        className={cn(
+          'px-2 py-1 transition-colors',
+          modo === 'and'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-background hover:bg-accent hover:text-accent-foreground',
+        )}
       >
         E
       </button>
       <button
         type="button"
         onClick={() => onChange('or')}
-        className={`px-2 py-1 ${modo === 'or' ? 'bg-gray-900 text-white' : 'bg-white'}`}
+        className={cn(
+          'px-2 py-1 transition-colors',
+          modo === 'or'
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-background hover:bg-accent hover:text-accent-foreground',
+        )}
       >
         OU
       </button>
@@ -178,14 +194,14 @@ function RenderCondicao({
   const valorBooleano = condicao.operador === 'has_opt_in_email' || condicao.operador === 'has_opt_in_whatsapp';
 
   return (
-    <div className="flex flex-1 gap-2 items-center text-sm">
+    <div className="flex flex-1 items-center gap-2 text-sm">
       <input
         type="text"
         value={condicao.campo}
         onChange={(e) => onChange({ ...condicao, campo: e.target.value })}
         placeholder="campo (ex: tags, extras.regiao)"
         list="campos-permitidos"
-        className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+        className={cn(CONTROLE_CLASSES, 'flex-1')}
       />
       <datalist id="campos-permitidos">
         {CamposPermitidos.map((c) => (
@@ -197,7 +213,7 @@ function RenderCondicao({
       <select
         value={condicao.operador}
         onChange={(e) => onChange({ ...condicao, operador: e.target.value as Operador })}
-        className="rounded-md border border-gray-300 px-2 py-1 bg-white"
+        className={CONTROLE_CLASSES}
       >
         {Operadores.map((op) => (
           <option key={op} value={op}>
@@ -212,7 +228,7 @@ function RenderCondicao({
           value={typeof condicao.valor === 'string' ? condicao.valor : ''}
           onChange={(e) => onChange({ ...condicao, valor: e.target.value })}
           placeholder="valor"
-          className="flex-1 rounded-md border border-gray-300 px-2 py-1"
+          className={cn(CONTROLE_CLASSES, 'flex-1')}
         />
       )}
     </div>
@@ -267,15 +283,18 @@ export function FiltroBuilderComPreview({
         }}
       />
       {fetchPreview && (
-        <div className="text-sm text-gray-700">
+        <div className="text-sm">
           {carregando ? (
-            <span className="text-gray-400">calculando…</span>
+            <span className="flex items-center gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Calculando…
+            </span>
           ) : previa ? (
             <span>
-              Contatos correspondentes: <strong>{previa.total}</strong>
+              Contatos correspondentes: <strong className="tabular-nums">{previa.total}</strong>
             </span>
           ) : (
-            <span className="text-gray-400">prévia indisponível</span>
+            <span className="text-muted-foreground">prévia indisponível</span>
           )}
         </div>
       )}

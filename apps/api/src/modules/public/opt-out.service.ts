@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { env } from '../../config/config.module.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
+import { env } from '../../config/config.module.js';
 
 import { OptOutTokenService } from './opt-out-token.service.js';
 

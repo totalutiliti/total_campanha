@@ -3,6 +3,7 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   Req,
   Res,
@@ -18,16 +19,16 @@ import { env } from '../../config/config.module.js';
 
 import { AuthService, ResultadoAuth } from './auth.service.js';
 import { CurrentUser } from './current-user.decorator.js';
-import { JwtAuthGuard } from './jwt-auth.guard.js';
-import { Public } from './public.decorator.js';
-import type { AuthenticatedUser } from './jwt-payload.type.js';
-
 import { ForgotDto } from './dto/forgot.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { ResetDto } from './dto/reset.dto.js';
 import { SelectTenantDto } from './dto/select-tenant.dto.js';
 import { SignupDto } from './dto/signup.dto.js';
 import { TotpVerifyDto } from './dto/totp-verify.dto.js';
+import { TrocarSenhaDto } from './dto/trocar-senha.dto.js';
+import { JwtAuthGuard } from './jwt-auth.guard.js';
+import type { AuthenticatedUser } from './jwt-payload.type.js';
+import { Public } from './public.decorator.js';
 
 const REFRESH_COOKIE_NAME = 'tc_refresh';
 
@@ -134,6 +135,19 @@ export class AuthController {
   @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
   async reset(@Body() dto: ResetDto): Promise<{ ok: true }> {
     await this.authService.reset(dto.token, dto.novaSenha);
+    return { ok: true };
+  }
+
+  /** Troca de senha autenticada (Minha conta). Throttle estrito anti-brute-force. */
+  @UseGuards(JwtAuthGuard)
+  @Patch('senha')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 15 * 60_000 } })
+  async trocarSenha(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: TrocarSenhaDto,
+  ): Promise<{ ok: true }> {
+    await this.authService.trocarSenha(user.sub, dto.senhaAtual, dto.novaSenha);
     return { ok: true };
   }
 

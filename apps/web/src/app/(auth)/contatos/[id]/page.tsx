@@ -1,10 +1,13 @@
 'use client';
 
+import { ArrowLeft, Loader2, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { ContatoForm, ContatoPayload } from '../../../../components/contatos/contato-form';
+import { AlertErro } from '../../../../components/ui/alerts';
+import { Button } from '../../../../components/ui/button';
 import { useAuth } from '../../../../lib/auth/context';
 import { mensagemErro } from '../../../../lib/erro';
 
@@ -81,17 +84,25 @@ export default function EditarContatoPage() {
 
   return (
     <div>
-      <Link href="/contatos" className="text-xs text-gray-600 hover:text-gray-900">
-        ← Voltar para contatos
+      <Link
+        href="/contatos"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para contatos
       </Link>
-      <h1 className="mt-2 mb-4 text-2xl font-semibold">Editar contato</h1>
+      <h1 className="mt-2 text-3xl font-bold">Editar contato</h1>
+      <p className="mb-6 mt-1 text-sm text-muted-foreground">
+        Atualize os dados ou o consentimento (opt-in) deste cliente.
+      </p>
 
       {carregando ? (
-        <p className="text-sm text-gray-500">carregando…</p>
-      ) : erroCarga ? (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-          {erroCarga}
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando contato…
         </p>
+      ) : erroCarga ? (
+        <AlertErro>{erroCarga}</AlertErro>
       ) : contato ? (
         <>
           <ContatoForm
@@ -102,25 +113,40 @@ export default function EditarContatoPage() {
             onSalvar={salvar}
           />
 
-          <div className="mt-10 max-w-lg rounded-md border border-red-200 bg-red-50/40 p-4">
-            <h2 className="text-sm font-medium text-red-800">Excluir contato</h2>
-            <label className="mt-2 flex items-center gap-2 text-xs text-gray-700">
+          <div className="mt-10 max-w-lg rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+            <h2 className="text-sm font-semibold text-destructive">Excluir contato</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              O contato sai da lista e não recebe mais campanhas.
+            </p>
+            <label className="mt-3 flex items-center gap-2 text-xs">
               <input
                 type="checkbox"
                 checked={lgpd}
                 onChange={(e) => setLgpd(e.target.checked)}
-                className="accent-red-700"
+                className="h-4 w-4 rounded accent-destructive"
               />
               Apagar definitivamente (direito ao esquecimento — LGPD)
             </label>
-            <button
+            <Button
               type="button"
+              variant="destructive"
+              size="sm"
               onClick={excluir}
               disabled={excluindo}
-              className="mt-3 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-100 focus-visible:ring-2 focus-visible:ring-red-700 focus-visible:outline-none disabled:opacity-60"
+              className="mt-3"
             >
-              {excluindo ? 'Excluindo…' : 'Excluir contato'}
-            </button>
+              {excluindo ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Excluindo…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Excluir contato
+                </>
+              )}
+            </Button>
           </div>
         </>
       ) : null}

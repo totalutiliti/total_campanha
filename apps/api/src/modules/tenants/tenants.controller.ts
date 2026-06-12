@@ -1,9 +1,9 @@
 import { Controller, Get, ForbiddenException, NotFoundException, UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
+import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { CurrentUser } from '../auth/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard.js';
-import { PrismaService } from '../../common/prisma/prisma.service.js';
 import type { AuthenticatedUser } from '../auth/jwt-payload.type.js';
 
 @ApiTags('me')

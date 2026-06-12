@@ -1,9 +1,16 @@
 'use client';
 
+import { ArrowLeft, Check, Copy, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { AlertErro, AlertSucesso } from '../../../../../components/ui/alerts';
+import { Button } from '../../../../../components/ui/button';
+import { Input } from '../../../../../components/ui/input';
+import { Label } from '../../../../../components/ui/label';
 import { useAuth } from '../../../../../lib/auth/context';
+import { mensagemErro } from '../../../../../lib/erro';
 
 interface RegistroDns {
   tipo: 'CNAME' | 'TXT' | 'MX';
@@ -42,7 +49,7 @@ export default function NovaConexaoEmailPage() {
       });
       setResultado(r);
     } catch (err) {
-      setErro(err instanceof Error ? err.message : 'Erro inesperado.');
+      setErro(mensagemErro(err));
     } finally {
       setEnviando(false);
     }
@@ -57,97 +64,116 @@ export default function NovaConexaoEmailPage() {
 
   if (resultado) {
     return (
-      <div className="space-y-4">
-        <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-900">
+      <div className="max-w-3xl space-y-4">
+        <h1 className="text-3xl font-bold">Conectar e-mail</h1>
+        <AlertSucesso>
           E-mail cadastrado. Configure estes registros no seu provedor de domínio (Registro.br,
           Cloudflare, etc). A verificação pode levar de minutos a algumas horas.
+        </AlertSucesso>
+
+        <div className="overflow-hidden rounded-lg border bg-card text-card-foreground shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-left">
+              <tr>
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Tipo</th>
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Nome</th>
+                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">Valor</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {resultado.registrosDns.map((r, i) => (
+                <tr key={i} className="border-t align-top">
+                  <td className="px-3 py-2 font-medium">{r.tipo}</td>
+                  <td className="px-3 py-2 font-mono text-xs">{r.nome}</td>
+                  <td className="break-all px-3 py-2 font-mono text-xs">{r.valor}</td>
+                  <td className="px-3 py-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copiar(r.valor, i)}
+                      className="gap-2"
+                    >
+                      {copiou === i ? (
+                        <>
+                          <Check className="h-4 w-4 text-green-600 dark:text-green-500" />
+                          Copiado
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4" />
+                          Copiar valor
+                        </>
+                      )}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden">
-          <thead className="bg-gray-50 text-left">
-            <tr>
-              <th className="px-3 py-2">Tipo</th>
-              <th className="px-3 py-2">Nome</th>
-              <th className="px-3 py-2">Valor</th>
-              <th className="px-3 py-2"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {resultado.registrosDns.map((r, i) => (
-              <tr key={i} className="border-t border-gray-200 align-top">
-                <td className="px-3 py-2">{r.tipo}</td>
-                <td className="px-3 py-2 font-mono text-xs">{r.nome}</td>
-                <td className="px-3 py-2 font-mono text-xs break-all">{r.valor}</td>
-                <td className="px-3 py-2">
-                  <button
-                    type="button"
-                    onClick={() => copiar(r.valor, i)}
-                    className="text-xs rounded border border-gray-300 px-2 py-1"
-                  >
-                    {copiou === i ? 'Copiado' : 'Copiar valor'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <button
-          type="button"
-          onClick={() => router.push('/conexoes')}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm"
-        >
-          Voltar
-        </button>
+        <Button type="button" variant="outline" onClick={() => router.push('/conexoes')}>
+          Voltar para conexões
+        </Button>
       </div>
     );
   }
 
   return (
-    <form onSubmit={aoSubmeter} className="space-y-4 max-w-md">
-      <h1 className="text-2xl font-semibold">Conectar e-mail</h1>
-      <p className="text-sm text-gray-600">
+    <div>
+      <Link
+        href="/conexoes"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para conexões
+      </Link>
+      <h1 className="mt-2 text-3xl font-bold">Conectar e-mail</h1>
+      <p className="mb-6 mt-1 max-w-md text-sm text-muted-foreground">
         Para enviar campanhas por e-mail você usa um domínio próprio (o que vem depois do @).
-        Informe o domínio e o remetente; na etapa seguinte mostramos os registros para liberar
-        o envio junto ao seu provedor de domínio.
+        Informe o domínio e o remetente; na etapa seguinte mostramos os registros para liberar o
+        envio junto ao seu provedor de domínio.
       </p>
 
-      <label className="block">
-        <span className="text-sm font-medium">Domínio de envio</span>
-        <input
-          value={dominio}
-          onChange={(e) => setDominio(e.target.value)}
-          required
-          placeholder="campanhas.suaempresa.com.br"
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-        />
-      </label>
+      <form onSubmit={aoSubmeter} className="max-w-md space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="dominio">Domínio de envio</Label>
+          <Input
+            id="dominio"
+            value={dominio}
+            onChange={(e) => setDominio(e.target.value)}
+            required
+            placeholder="campanhas.suaempresa.com.br"
+          />
+        </div>
 
-      <label className="block">
-        <span className="text-sm font-medium">Remetente (From)</span>
-        <input
-          type="email"
-          value={remetente}
-          onChange={(e) => setRemetente(e.target.value)}
-          required
-          placeholder="no-reply@campanhas.suaempresa.com.br"
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-        />
-      </label>
+        <div className="space-y-2">
+          <Label htmlFor="remetente">Remetente (From)</Label>
+          <Input
+            id="remetente"
+            type="email"
+            value={remetente}
+            onChange={(e) => setRemetente(e.target.value)}
+            required
+            placeholder="no-reply@campanhas.suaempresa.com.br"
+          />
+        </div>
 
-      {erro && (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-          {erro}
-        </p>
-      )}
+        {erro && <AlertErro>{erro}</AlertErro>}
 
-      <button
-        type="submit"
-        disabled={enviando}
-        className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium disabled:opacity-60"
-      >
-        {enviando ? 'Conectando…' : 'Conectar e-mail'}
-      </button>
-    </form>
+        <Button type="submit" disabled={enviando}>
+          {enviando ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Conectando…
+            </>
+          ) : (
+            'Conectar e-mail'
+          )}
+        </Button>
+      </form>
+    </div>
   );
 }

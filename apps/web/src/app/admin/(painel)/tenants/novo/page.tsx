@@ -1,10 +1,17 @@
 'use client';
 
+import { Check, Copy, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
+import { AlertAviso, AlertSucesso } from '../../../../../components/ui/alerts';
+import { Button, buttonVariants } from '../../../../../components/ui/button';
+import { Input } from '../../../../../components/ui/input';
+import { Label } from '../../../../../components/ui/label';
 import { useAdminAuth } from '../../../../../lib/admin/context';
 import { MensagemErro } from '../../../../../lib/admin/ui';
+import { cn } from '../../../../../lib/cn';
+import { mensagemErro } from '../../../../../lib/erro';
 
 interface TenantCriado {
   id: string;
@@ -14,8 +21,9 @@ interface TenantCriado {
   senhaTemporaria: string;
 }
 
-const INPUT_CLS =
-  'mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none';
+/** Select nativo com as mesmas classes de token do Input do kit. */
+const SELECT_CLS =
+  'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
 
 // Range de marcas diacríticas combinantes (U+0300–U+036F) montado via RegExp
 // de string para manter o código em ASCII puro.
@@ -73,7 +81,7 @@ export default function NovoTenantPage() {
       });
       setCriado(r);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Falha ao criar o tenant.');
+      setErro(mensagemErro(e, 'Falha ao criar o tenant.'));
     } finally {
       setEnviando(false);
     }
@@ -103,52 +111,56 @@ export default function NovoTenantPage() {
   if (criado) {
     return (
       <div className="max-w-xl space-y-5">
-        <Link href="/admin/tenants" className="text-sm text-gray-500 hover:text-gray-700">
+        <Link
+          href="/admin/tenants"
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
           ← Tenants
         </Link>
 
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-          <h1 className="text-lg font-semibold text-green-900">Tenant criado ✓</h1>
-          <p className="mt-1 text-sm text-green-800">
+        <AlertSucesso>
+          <h1 className="text-base font-semibold">Tenant criado!</h1>
+          <p className="mt-1">
             <strong>{criado.razaoSocial}</strong> ({criado.slug}) foi criado com o administrador{' '}
             <strong>{criado.emailAdmin}</strong>.
           </p>
-        </div>
+        </AlertSucesso>
 
-        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
-          <p className="text-sm font-medium text-amber-900">Senha temporária (aparece só agora)</p>
-          <div className="mt-2 flex items-center gap-2">
-            <code className="flex-1 rounded border border-amber-300 bg-white px-3 py-2 text-sm font-mono break-all">
-              {criado.senhaTemporaria}
-            </code>
-            <button
-              type="button"
-              onClick={copiarSenha}
-              className="shrink-0 rounded-md bg-gray-900 text-white px-3 py-2 text-sm font-medium hover:bg-gray-800"
-            >
-              {copiado ? 'Copiado!' : 'Copiar'}
-            </button>
+        <AlertAviso>
+          <div className="min-w-0 flex-1">
+            <p className="font-medium">Senha temporária (aparece só agora)</p>
+            <div className="mt-2 flex items-center gap-2">
+              <code className="flex-1 rounded-md border bg-background px-3 py-2 font-mono text-sm break-all">
+                {criado.senhaTemporaria}
+              </code>
+              <Button type="button" size="sm" onClick={copiarSenha} className="shrink-0 gap-2">
+                {copiado ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    Copiado!
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-4 w-4" />
+                    Copiar
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Repasse com segurança ao cliente e oriente a trocar no primeiro acesso (link “Esqueci
+              a senha” na tela de login). Não será exibida de novo.
+            </p>
           </div>
-          <p className="mt-2 text-xs text-amber-800">
-            Repasse com segurança ao cliente e oriente a trocar no primeiro acesso (link “Esqueci a
-            senha” na tela de login). Não será exibida de novo.
-          </p>
-        </div>
+        </AlertAviso>
 
         <div className="flex gap-2">
-          <Link
-            href={`/admin/tenants/${criado.id}`}
-            className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-800"
-          >
+          <Link href={`/admin/tenants/${criado.id}`} className={cn(buttonVariants({ size: 'sm' }))}>
             Ver tenant
           </Link>
-          <button
-            type="button"
-            onClick={recomecar}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={recomecar}>
             Criar outro
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -156,10 +168,13 @@ export default function NovoTenantPage() {
 
   return (
     <div className="max-w-xl">
-      <Link href="/admin/tenants" className="text-sm text-gray-500 hover:text-gray-700">
+      <Link
+        href="/admin/tenants"
+        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
         ← Tenants
       </Link>
-      <h1 className="text-2xl font-semibold mt-2 mb-4">Novo tenant</h1>
+      <h1 className="text-2xl font-semibold tracking-tight mt-2 mb-4">Novo tenant</h1>
 
       {erro && (
         <div className="mb-3">
@@ -168,86 +183,91 @@ export default function NovoTenantPage() {
       )}
 
       <form onSubmit={aoSubmeter} className="space-y-4">
-        <label className="block">
-          <span className="text-sm font-medium text-gray-900">Razão social</span>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="razao-social">Razão social</Label>
+          <Input
+            id="razao-social"
             value={razaoSocial}
             onChange={(e) => aoMudarRazao(e.target.value)}
             required
-            className={INPUT_CLS}
             placeholder="Cardans Tencar Autopeças LTDA"
           />
-        </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-medium text-gray-900">CNPJ</span>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="cnpj">CNPJ</Label>
+          <Input
+            id="cnpj"
             value={cnpj}
             onChange={(e) => setCnpj(e.target.value)}
             required
             inputMode="numeric"
-            className={INPUT_CLS}
             placeholder="11.222.333/0001-44"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             14 dígitos. Pode digitar com pontuação — só os números são usados.
           </p>
-        </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-medium text-gray-900">Identificador (slug)</span>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="slug">Identificador (slug)</Label>
+          <Input
+            id="slug"
             value={slug}
             onChange={(e) => {
               setSlug(e.target.value);
               setSlugTocado(true);
             }}
             required
-            className={INPUT_CLS}
             placeholder="cardanstencar"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Letras minúsculas, números e hífen. Vira parte de links (ex.: páginas de opt-in).
           </p>
-        </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-medium text-gray-900">E-mail do administrador</span>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="email-admin">E-mail do administrador</Label>
+          <Input
+            id="email-admin"
             type="email"
             value={emailAdmin}
             onChange={(e) => setEmailAdmin(e.target.value)}
             required
-            className={INPUT_CLS}
             placeholder="dono@empresa.com.br"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Vira o primeiro usuário (papel Administrador) e recebe a senha temporária.
           </p>
-        </label>
+        </div>
 
-        <label className="block">
-          <span className="text-sm font-medium text-gray-900">Plano</span>
-          <select value={plano} onChange={(e) => setPlano(e.target.value)} className={INPUT_CLS}>
+        <div className="space-y-2">
+          <Label htmlFor="plano">Plano</Label>
+          <select
+            id="plano"
+            value={plano}
+            onChange={(e) => setPlano(e.target.value)}
+            className={SELECT_CLS}
+          >
             <option value="STARTER">Starter</option>
             <option value="PRO">Pro</option>
             <option value="ENTERPRISE">Enterprise</option>
           </select>
-          <p className="mt-1 text-xs text-gray-500">Começa em teste (TRIAL) por 14 dias.</p>
-        </label>
+          <p className="text-xs text-muted-foreground">Começa em teste (TRIAL) por 14 dias.</p>
+        </div>
 
         <div className="flex gap-2 pt-2">
-          <button
-            type="submit"
-            disabled={enviando}
-            className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-60 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-2 focus-visible:outline-none"
-          >
-            {enviando ? 'Criando…' : 'Criar tenant'}
-          </button>
-          <Link
-            href="/admin/tenants"
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
+          <Button type="submit" disabled={enviando}>
+            {enviando ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Criando…
+              </>
+            ) : (
+              'Criar tenant'
+            )}
+          </Button>
+          <Link href="/admin/tenants" className={cn(buttonVariants({ variant: 'outline' }))}>
             Cancelar
           </Link>
         </div>
