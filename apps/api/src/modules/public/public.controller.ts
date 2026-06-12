@@ -47,6 +47,19 @@ export class PublicController {
       userAgent: (req.get('user-agent') ?? 'desconhecido').slice(0, 500),
     });
   }
+
+  /**
+   * One-Click Unsubscribe (RFC 8058) — Gmail/Yahoo fazem POST direto na URL do
+   * header List-Unsubscribe, sem abrir página. Mesmo efeito do GET.
+   */
+  @Public()
+  @Post('opt-out/:token')
+  async submeterOptOutOneClick(@Param('token') token: string, @Req() req: Request) {
+    return this.optOut.executar(token, {
+      ip: extrairIp(req),
+      userAgent: (req.get('user-agent') ?? 'one-click').slice(0, 500),
+    });
+  }
 }
 
 function extrairIp(req: Request): string {

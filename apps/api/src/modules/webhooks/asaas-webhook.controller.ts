@@ -23,7 +23,9 @@ interface AsaasWebhookBody {
 
 /**
  * Webhook do Asaas (billing). Valida o header `asaas-access-token` contra
- * `ASAAS_WEBHOOK_TOKEN` (se configurado). Em DEV sem token, aceita.
+ * `ASAAS_WEBHOOK_TOKEN`. FAIL-CLOSED: sem o token configurado, rejeita tudo —
+ * um POST anônimo aqui mudaria status de billing de tenant (ativar sem pagar,
+ * cancelar conta alheia). Em dev, configure o token no .env para testar.
  */
 @ApiTags('webhooks')
 @Controller('webhooks/asaas')
@@ -45,7 +47,11 @@ export class AsaasWebhookController {
     @Headers('asaas-access-token') token: string | undefined,
     @Body() body: AsaasWebhookBody,
   ): Promise<{ ok: true }> {
-    if (this.tokenEsperado && token !== this.tokenEsperado) {
+    if (!this.tokenEsperado) {
+      this.logger.warn({ msg: 'webhook_asaas_rejeitado_token_nao_configurado' });
+      throw new ForbiddenException('Webhook não configurado.');
+    }
+    if (token !== this.tokenEsperado) {
       throw new ForbiddenException('Token de webhook inválido.');
     }
     const evento = body.event ?? '';

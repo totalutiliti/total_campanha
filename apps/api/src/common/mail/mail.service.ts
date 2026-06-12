@@ -1,3 +1,4 @@
+import { SendEmailCommand, SESv2Client } from '@aws-sdk/client-sesv2';
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import nodemailer, { Transporter } from 'nodemailer';
@@ -17,47 +18,78 @@ export interface MailMessage {
  * MailService — abstrai envio de emails transacionais (signup confirm, double
  * opt-in, reset de senha, notificação de inbox, etc).
  *
- * Provider atual: SMTP (DEV via MailHog em localhost:1025).
- *
- * Em PROD, MAIL_PROVIDER=ses ativa o transporter AWS SES (entra na Fase 4.2
- * junto com a verificação DKIM de domínio do tenant). Por enquanto SMTP cobre
- * dev + smoke tests.
+ * - `MAIL_PROVIDER=smtp` (default): nodemailer — MailHog em dev, SMTP
+ *   autenticado quando SMTP_USER/SMTP_PASS presentes.
+ * - `MAIL_PROVIDER=ses`: Amazon SES v2 (`SendEmail` com headers custom).
+ *   Exige AWS_ACCESS_KEY_ID/SECRET (validação cruzada no env).
+ * - `MAIL_PROVIDER=resend`: ainda não implementado — warning + fallback SMTP.
  */
 @Injectable()
 export class MailService implements OnModuleDestroy {
   private readonly logger = new Logger(MailService.name);
-  private readonly transporter: Transporter;
   private readonly fromDefault: string;
+  private readonly transporter: Transporter | null = null;
+  private readonly ses: SESv2Client | null = null;
+  private readonly sesConfigurationSet: string | undefined;
 
   constructor(config: ConfigService) {
     const provider = env(config, 'MAIL_PROVIDER');
     this.fromDefault = env(config, 'MAIL_FROM_DEFAULT');
 
-    if (provider === 'smtp') {
-      this.transporter = nodemailer.createTransport({
-        host: env(config, 'SMTP_HOST'),
-        port: env(config, 'SMTP_PORT'),
-        secure: env(config, 'SMTP_SECURE'),
-        auth: env(config, 'SMTP_USER')
-          ? {
-              user: env(config, 'SMTP_USER') as string,
-              pass: env(config, 'SMTP_PASS') as string,
-            }
-          : undefined,
+    if (provider === 'ses') {
+      this.ses = new SESv2Client({
+        region: env(config, 'AWS_REGION'),
+        credentials: {
+          accessKeyId: env(config, 'AWS_ACCESS_KEY_ID') as string,
+          secretAccessKey: env(config, 'AWS_SECRET_ACCESS_KEY') as string,
+        },
       });
-    } else {
-      // SES/Resend entram na Fase 4.2.
-      this.logger.warn(`Provider ${provider} ainda não implementado — caindo para SMTP.`);
-      this.transporter = nodemailer.createTransport({
-        host: env(config, 'SMTP_HOST'),
-        port: env(config, 'SMTP_PORT'),
-        secure: env(config, 'SMTP_SECURE'),
-      });
+      this.sesConfigurationSet = env(config, 'SES_CONFIGURATION_SET') || undefined;
+      this.logger.log('MailService em modo SES (envio real).');
+      return;
     }
+
+    if (provider !== 'smtp') {
+      this.logger.warn(`Provider ${provider} ainda não implementado — caindo para SMTP.`);
+    }
+    this.transporter = nodemailer.createTransport({
+      host: env(config, 'SMTP_HOST'),
+      port: env(config, 'SMTP_PORT'),
+      secure: env(config, 'SMTP_SECURE'),
+      auth: env(config, 'SMTP_USER')
+        ? {
+            user: env(config, 'SMTP_USER') as string,
+            pass: env(config, 'SMTP_PASS') as string,
+          }
+        : undefined,
+    });
   }
 
   async enviar(msg: MailMessage): Promise<{ messageId: string }> {
-    const info = await this.transporter.sendMail({
+    if (this.ses) {
+      const out = await this.ses.send(
+        new SendEmailCommand({
+          FromEmailAddress: msg.from ?? this.fromDefault,
+          Destination: { ToAddresses: [msg.to] },
+          ConfigurationSetName: this.sesConfigurationSet,
+          Content: {
+            Simple: {
+              Subject: { Data: msg.subject, Charset: 'UTF-8' },
+              Body: {
+                Html: { Data: msg.html, Charset: 'UTF-8' },
+                ...(msg.text ? { Text: { Data: msg.text, Charset: 'UTF-8' } } : {}),
+              },
+              Headers: msg.headers
+                ? Object.entries(msg.headers).map(([Name, Value]) => ({ Name, Value }))
+                : undefined,
+            },
+          },
+        }),
+      );
+      return { messageId: out.MessageId ?? 'ses-sem-id' };
+    }
+
+    const info = await (this.transporter as Transporter).sendMail({
       from: msg.from ?? this.fromDefault,
       to: msg.to,
       subject: msg.subject,
@@ -69,6 +101,6 @@ export class MailService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    this.transporter.close();
+    this.transporter?.close();
   }
 }

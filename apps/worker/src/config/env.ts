@@ -14,20 +14,27 @@ export const WorkerEnvSchema = z.object({
   AUTH_PEPPER: z.string().min(32),
   TOKEN_KMS_KEY: z.string().min(16),
 
-  // AWS SES (Fase 4.2 — job recorrente verifica DKIM via SES GetEmailIdentity)
+  // AWS SES (verificação DKIM + envio real quando MAIL_PROVIDER=ses)
   AWS_REGION: z.string().default('sa-east-1'),
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
+  SES_CONFIGURATION_SET: z.string().optional(),
 
   // Meta Graph (dispatch WhatsApp — Fase 5.2)
   META_GRAPH_BASE_URL: z.string().url().default('https://graph.facebook.com'),
   META_GRAPH_VERSION: z.string().default('v22.0'),
 
-  // SMTP (dispatch Email — Fase 5.2)
+  // Email (dispatch — Fase 5.2). 'ses' exige AWS_ACCESS_KEY_ID/SECRET.
+  MAIL_PROVIDER: z.enum(['smtp', 'ses']).default('smtp'),
   MAIL_FROM_DEFAULT: z.string().default('Total Campanha <no-reply@totalcampanha.dev>'),
   SMTP_HOST: z.string().default('localhost'),
   SMTP_PORT: z.coerce.number().int().positive().default(1025),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
   SMTP_SECURE: z.enum(['true', 'false']).default('false'),
+
+  // Segredo dos tokens de opt-out one-click (mesmo da API; fallback AUTH_PEPPER).
+  OPT_OUT_TOKEN_SECRET: z.string().min(16).optional(),
 
   // URLs públicas (unsubscribe header / tracking pixel)
   API_PUBLIC_URL: z.string().url().default('http://localhost:3001'),
@@ -50,5 +57,13 @@ export function loadEnv(raw: NodeJS.ProcessEnv): WorkerEnv {
       .join('\n');
     throw new Error(`[worker/env] variáveis inválidas:\n${detalhe}`);
   }
-  return parsed.data;
+  // Validação cruzada: provider SES exige credenciais AWS explícitas — sem isso
+  // o envio falharia silenciosamente em runtime.
+  const env = parsed.data;
+  if (env.MAIL_PROVIDER === 'ses' && (!env.AWS_ACCESS_KEY_ID || !env.AWS_SECRET_ACCESS_KEY)) {
+    throw new Error(
+      '[worker/env] MAIL_PROVIDER=ses exige AWS_ACCESS_KEY_ID e AWS_SECRET_ACCESS_KEY.',
+    );
+  }
+  return env;
 }

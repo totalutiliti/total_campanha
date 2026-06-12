@@ -8,8 +8,8 @@ import {
 import type { Request } from 'express';
 
 import { PrismaService } from '../../common/prisma/prisma.service.js';
-import { TokenService } from '../auth/token.service.js';
 import type { AuthenticatedUser } from '../auth/jwt-payload.type.js';
+import { TokenService } from '../auth/token.service.js';
 
 /**
  * Guarda do escopo Super Admin (/admin).

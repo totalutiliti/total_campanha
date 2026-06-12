@@ -1,9 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
   GetEmailIdentityCommand,
   SESv2Client,
 } from '@aws-sdk/client-sesv2';
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 /**
  * Versão simplificada do SesIdentityClient da API — só verificação.

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
-import { AsaasClient } from '../../common/integrations/asaas.client.js';
 import { AuditService } from '../../common/audit/audit.service.js';
+import { AsaasClient } from '../../common/integrations/asaas.client.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 
 type Plano = 'STARTER' | 'PRO' | 'ENTERPRISE';
@@ -68,12 +68,21 @@ export class BillingService {
   async atual(tenantId: string) {
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) throw new NotFoundException('Tenant não encontrado.');
+
+    // Com assinatura mas sem pagamento confirmado (TRIAL/INADIMPLENTE), expõe
+    // o link de pagamento para o admin regularizar direto da tela de Plano.
+    let linkPagamento: string | null = null;
+    if (tenant.asaasSubscriptionId && tenant.status !== 'ATIVO') {
+      linkPagamento = await this.asaas.linkPagamento(tenant.asaasSubscriptionId);
+    }
+
     return {
       plano: tenant.plano,
       status: tenant.status,
       valorMensalBrl: PRECO_PLANO[tenant.plano as Plano],
       trialAteEm: tenant.trialAteEm,
       temAssinatura: !!tenant.asaasSubscriptionId,
+      linkPagamento,
     };
   }
 

@@ -4,7 +4,6 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { ZodValidationPipe } from 'nestjs-zod';
 
-import { AppConfigModule } from './config/config.module.js';
 import { AuditModule } from './common/audit/audit.module.js';
 import { CryptoModule } from './common/crypto/crypto.module.js';
 import { HealthModule } from './common/health/health.module.js';
@@ -15,6 +14,7 @@ import { AppQueueModule } from './common/queue/queue.module.js';
 import { RedisModule } from './common/redis/redis.module.js';
 import { AppThrottlerModule } from './common/throttler/throttler.module.js';
 import { UsageModule } from './common/usage/usage.module.js';
+import { AppConfigModule } from './config/config.module.js';
 import { AnalyticsModule } from './modules/analytics/analytics.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { BillingModule } from './modules/billing/billing.module.js';

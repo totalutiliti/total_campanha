@@ -13,8 +13,8 @@ import { ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 
 import { CurrentUser } from '../auth/current-user.decorator.js';
-import { Public } from '../auth/public.decorator.js';
 import type { AuthenticatedUser } from '../auth/jwt-payload.type.js';
+import { Public } from '../auth/public.decorator.js';
 
 import { CriarTenantDto } from './dto/criar-tenant.dto.js';
 import { LoginSuperAdminDto } from './dto/login-super-admin.dto.js';

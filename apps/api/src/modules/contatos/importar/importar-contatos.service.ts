@@ -1,12 +1,12 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectQueue } from '@nestjs/bullmq';
 import { Prisma } from '@total-campanha/db';
 import type { Queue } from 'bullmq';
 
-import { env } from '../../../config/config.module.js';
 import { AuditService } from '../../../common/audit/audit.service.js';
 import { PrismaService } from '../../../common/prisma/prisma.service.js';
+import { env } from '../../../config/config.module.js';
 
 import { parsearCsvContatos, ResultadoParse } from './parser-csv.js';
 
