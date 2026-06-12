@@ -1,8 +1,14 @@
 'use client';
 
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { cn } from '../../lib/cn';
 import { paraE164 } from '../../lib/telefone';
+import { AlertErro } from '../ui/alerts';
+import { Button, buttonVariants } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 
 export interface ContatoPayload {
   nome: string | null;
@@ -88,58 +94,66 @@ export function ContatoForm({
   const mensagem = erro ?? erroServidor;
 
   return (
-    <form onSubmit={submeter} className="space-y-4 max-w-lg">
-      <Campo label="Nome">
-        <input
+    <form onSubmit={submeter} className="max-w-lg space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="contato-nome">Nome</Label>
+        <Input
+          id="contato-nome"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
           placeholder="Auto Peças Silva"
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
         />
-      </Campo>
+      </div>
 
-      <Campo label="E-mail">
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="contato-email">E-mail</Label>
+        <Input
+          id="contato-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="contato@empresa.com.br"
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
         />
-      </Campo>
+      </div>
 
-      <Campo label="Telefone (com DDD)">
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="contato-telefone">Telefone (com DDD)</Label>
+        <Input
+          id="contato-telefone"
           value={telefone}
           onChange={(e) => setTelefone(e.target.value)}
           placeholder="(11) 98765-4321"
           inputMode="tel"
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
         />
-        <p className="mt-1 text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground">
           Pode digitar com parênteses e traços — ajustamos o formato automaticamente.
         </p>
-      </Campo>
+      </div>
 
-      <Campo label="Tags">
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="contato-tags">Tags</Label>
+        <Input
+          id="contato-tags"
           value={tags}
           onChange={(e) => setTags(e.target.value)}
           placeholder="cliente-ativo, regiao-oeste"
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
         />
-        <p className="mt-1 text-xs text-gray-500">Separe por vírgula. Use para criar segmentos depois.</p>
-      </Campo>
+        <p className="text-xs text-muted-foreground">
+          Separe por vírgula. Use para criar grupos depois.
+        </p>
+      </div>
 
-      <fieldset className="rounded-md border border-gray-200 p-3">
-        <legend className="px-1 text-xs font-medium text-gray-700">Pode receber campanhas por</legend>
+      <fieldset className="rounded-md border p-3">
+        <legend className="px-1 text-xs font-medium text-muted-foreground">
+          Pode receber campanhas por
+        </legend>
         <div className="flex gap-6">
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={optInEmail}
               onChange={(e) => setOptInEmail(e.target.checked)}
-              className="accent-gray-900"
+              className="h-4 w-4 rounded accent-primary"
             />
             <span>E-mail</span>
           </label>
@@ -148,47 +162,34 @@ export function ContatoForm({
               type="checkbox"
               checked={optInWhatsapp}
               onChange={(e) => setOptInWhatsapp(e.target.checked)}
-              className="accent-gray-900"
+              className="h-4 w-4 rounded accent-primary"
             />
             <span>WhatsApp</span>
           </label>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-muted-foreground">
           Marque só se você tem o consentimento da pessoa (LGPD). Sem isso, ela não entra nas
           campanhas daquele canal.
         </p>
       </fieldset>
 
-      {mensagem && (
-        <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-          {mensagem}
-        </p>
-      )}
+      {mensagem && <AlertErro>{mensagem}</AlertErro>}
 
       <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={salvando}
-          className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {salvando ? 'Salvando…' : textoBotao}
-        </button>
-        <a
-          href={hrefCancelar}
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-        >
+        <Button type="submit" disabled={salvando}>
+          {salvando ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Salvando…
+            </>
+          ) : (
+            textoBotao
+          )}
+        </Button>
+        <a href={hrefCancelar} className={cn(buttonVariants({ variant: 'outline' }))}>
           Cancelar
         </a>
       </div>
     </form>
-  );
-}
-
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-gray-900">{label}</span>
-      {children}
-    </label>
   );
 }

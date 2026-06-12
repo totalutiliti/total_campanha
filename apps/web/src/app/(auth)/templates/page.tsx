@@ -1,9 +1,14 @@
 'use client';
 
+import { Loader2, MessageSquare, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { AlertErro } from '../../../components/ui/alerts';
+import { Badge } from '../../../components/ui/badge';
+import { buttonVariants } from '../../../components/ui/button';
 import { useAuth } from '../../../lib/auth/context';
+import { cn } from '../../../lib/cn';
 import { mensagemErro } from '../../../lib/erro';
 
 interface Template {
@@ -15,6 +20,11 @@ interface Template {
   metaLanguage: string | null;
   createdAt: string;
 }
+
+const BADGE_CANAL: Record<Template['canal'], string> = {
+  EMAIL: 'bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300',
+  WHATSAPP: 'bg-green-100 text-green-800 dark:bg-green-950/60 dark:text-green-300',
+};
 
 export default function TemplatesListPage() {
   const { api } = useAuth();
@@ -33,33 +43,33 @@ export default function TemplatesListPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 mb-1 flex-wrap">
-        <h1 className="text-2xl font-semibold">Mensagens</h1>
-        <Link
-          href="/templates/novo"
-          className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-        >
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold">Mensagens</h1>
+        <Link href="/templates/novo" className={cn(buttonVariants(), 'gap-2')}>
+          <Plus className="h-4 w-4" />
           Nova mensagem
         </Link>
       </div>
-      <p className="text-xs text-gray-500 mb-4">As mensagens que você dispara nas campanhas.</p>
+      <p className="mb-6 text-sm text-muted-foreground">
+        Os textos que você dispara nas campanhas, de WhatsApp ou e-mail.
+      </p>
 
-      {erro && (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3 mb-3">{erro}</p>
-      )}
+      {erro && <AlertErro className="mb-3">{erro}</AlertErro>}
 
       {itens === null ? (
-        <p className="text-sm text-gray-500">carregando…</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando mensagens…
+        </p>
       ) : itens.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
-          <p className="text-sm font-medium text-gray-900">Nenhuma mensagem ainda.</p>
-          <p className="mt-1 text-sm text-gray-600">
+        <div className="rounded-lg border border-dashed p-8 text-center">
+          <MessageSquare className="mx-auto h-10 w-10 text-muted-foreground/40" />
+          <p className="mt-3 text-sm font-medium">Nenhuma mensagem ainda.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
             Crie a mensagem que você vai enviar nas campanhas (WhatsApp ou e-mail).
           </p>
-          <Link
-            href="/templates/novo"
-            className="mt-4 inline-block rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700"
-          >
+          <Link href="/templates/novo" className={cn(buttonVariants(), 'mt-4 gap-2')}>
+            <Plus className="h-4 w-4" />
             Nova mensagem
           </Link>
         </div>
@@ -69,22 +79,23 @@ export default function TemplatesListPage() {
             <li key={t.id}>
               <Link
                 href={`/templates/${t.id}`}
-                className="block rounded-lg border border-gray-200 bg-white p-3 text-sm hover:border-gray-400 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+                className="block rounded-lg border bg-card p-3 text-sm text-card-foreground shadow-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-medium truncate">{t.nome}</div>
-                    <div className="text-xs text-gray-500 truncate">
+                    <div className="truncate font-medium">{t.nome}</div>
+                    <div className="truncate text-xs text-muted-foreground">
                       {t.canal === 'EMAIL'
                         ? `Assunto: ${t.assunto ?? '—'}`
                         : `${t.metaTemplateName ?? '—'} (${t.metaLanguage ?? '—'})`}
                     </div>
                   </div>
-                  <span
-                    className={`shrink-0 text-xs rounded px-2 py-0.5 ${t.canal === 'EMAIL' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}
+                  <Badge
+                    variant="outline"
+                    className={cn('shrink-0 border-transparent', BADGE_CANAL[t.canal])}
                   >
                     {t.canal === 'EMAIL' ? 'E-mail' : 'WhatsApp'}
-                  </span>
+                  </Badge>
                 </div>
               </Link>
             </li>

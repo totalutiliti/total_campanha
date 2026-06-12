@@ -1,9 +1,12 @@
 'use client';
 
+import { Check, FolderOpen, Megaphone, MessageSquare, Plug, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { buttonVariants } from '../../components/ui/button';
 import { useAuth } from '../../lib/auth/context';
+import { cn } from '../../lib/cn';
 
 interface Progresso {
   canal: boolean;
@@ -93,18 +96,20 @@ export default function DashboardPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold">Início</h1>
-      <p className="text-sm text-gray-600 mt-1">
+      <h1 className="text-3xl font-bold">Início</h1>
+      <p className="mt-1 text-sm text-muted-foreground">
         {me.tenantAtual?.razaoSocial}
         {plano ? ` · plano ${plano}` : ''}
       </p>
 
-      <section className="mt-6 rounded-lg border border-gray-200 bg-white p-5">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h2 className="text-lg font-medium">Comece por aqui</h2>
-          <span className="text-xs text-gray-500 tabular-nums">{concluidos} de 4 concluídos</span>
+      <section className="mt-6 rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold">Comece por aqui</h2>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {concluidos} de 4 concluídos
+          </span>
         </div>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="mt-1 text-sm text-muted-foreground">
           Quatro passos para enviar sua primeira campanha.
         </p>
 
@@ -114,35 +119,41 @@ export default function DashboardPage() {
             return (
               <li
                 key={p.titulo}
-                className={`flex items-center gap-3 rounded-md border p-3 ${
-                  ehProximo ? 'border-gray-900' : 'border-gray-200'
-                }`}
+                className={cn(
+                  'flex items-center gap-3 rounded-md border p-3 transition-colors',
+                  ehProximo && 'border-primary bg-primary/5',
+                )}
               >
                 <span
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-medium ${
+                  className={cn(
+                    'flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-medium',
                     p.feito
                       ? 'bg-green-600 text-white'
                       : ehProximo
-                        ? 'bg-gray-900 text-white'
-                        : 'bg-gray-100 text-gray-500'
-                  }`}
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground',
+                  )}
                 >
-                  {p.feito ? '✓' : i + 1}
+                  {p.feito ? <Check className="h-4 w-4" /> : i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className={`text-sm font-medium ${p.feito ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                  <div
+                    className={cn(
+                      'text-sm font-medium',
+                      p.feito && 'text-muted-foreground line-through',
+                    )}
+                  >
                     {p.titulo}
                   </div>
-                  <div className="text-xs text-gray-500">{p.descricao}</div>
+                  <div className="text-xs text-muted-foreground">{p.descricao}</div>
                 </div>
                 {!p.feito && (
                   <Link
                     href={p.href}
-                    className={`shrink-0 rounded-md px-3 py-1.5 text-sm font-medium ${
-                      ehProximo
-                        ? 'bg-gray-900 text-white hover:bg-gray-700'
-                        : 'border border-gray-300 text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={cn(
+                      buttonVariants({ variant: ehProximo ? 'default' : 'outline', size: 'sm' }),
+                      'shrink-0',
+                    )}
                   >
                     {p.cta}
                   </Link>
@@ -154,27 +165,38 @@ export default function DashboardPage() {
       </section>
 
       <section className="mt-6">
-        <h2 className="text-sm font-medium text-gray-700 mb-2">Atalhos</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <Card href="/campanhas" titulo="Campanhas" descricao="Criar e disparar." />
-          <Card href="/contatos" titulo="Contatos" descricao="Sua base de clientes." />
-          <Card href="/segmentos" titulo="Grupos" descricao="Quem vai receber." />
-          <Card href="/templates" titulo="Mensagens" descricao="O que você envia." />
-          <Card href="/conexoes" titulo="Conexões" descricao="WhatsApp e e-mail." />
+        <h2 className="mb-2 text-sm font-medium text-muted-foreground">Atalhos</h2>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <Atalho href="/campanhas" titulo="Campanhas" descricao="Criar e disparar." icone={Megaphone} />
+          <Atalho href="/contatos" titulo="Contatos" descricao="Sua base de clientes." icone={Users} />
+          <Atalho href="/segmentos" titulo="Grupos" descricao="Quem vai receber." icone={FolderOpen} />
+          <Atalho href="/templates" titulo="Mensagens" descricao="O que você envia." icone={MessageSquare} />
+          <Atalho href="/conexoes" titulo="Conexões" descricao="WhatsApp e e-mail." icone={Plug} />
         </div>
       </section>
     </div>
   );
 }
 
-function Card({ href, titulo, descricao }: { href: string; titulo: string; descricao: string }) {
+function Atalho({
+  href,
+  titulo,
+  descricao,
+  icone: Icone,
+}: {
+  href: string;
+  titulo: string;
+  descricao: string;
+  icone: typeof Megaphone;
+}) {
   return (
     <Link
       href={href}
-      className="rounded-lg border border-gray-200 bg-white p-4 hover:border-gray-900 transition"
+      className="rounded-lg border bg-card p-4 text-card-foreground shadow-sm transition-colors hover:border-primary hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
-      <div className="font-medium">{titulo}</div>
-      <div className="text-xs text-gray-500 mt-1">{descricao}</div>
+      <Icone className="h-5 w-5 text-primary" />
+      <div className="mt-2 text-sm font-medium">{titulo}</div>
+      <div className="mt-0.5 text-xs text-muted-foreground">{descricao}</div>
     </Link>
   );
 }

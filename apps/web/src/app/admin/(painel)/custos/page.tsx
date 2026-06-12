@@ -2,9 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { Button } from '../../../../components/ui/button';
+import { Input } from '../../../../components/ui/input';
+import { Label } from '../../../../components/ui/label';
 import { useAdminAuth } from '../../../../lib/admin/context';
 import { brl } from '../../../../lib/admin/format';
 import { EstatCartao, MensagemErro, Vazio } from '../../../../lib/admin/ui';
+import { mensagemErro } from '../../../../lib/erro';
 
 interface Resumo {
   hojeBrl: number;
@@ -42,7 +46,7 @@ export default function CustosPage() {
         const r = await api<Resumo>({ path: '/admin/usage' });
         if (ativo) setResumo(r);
       } catch (e) {
-        if (ativo) setErro(e instanceof Error ? e.message : 'Falha ao carregar.');
+        if (ativo) setErro(mensagemErro(e, 'Falha ao carregar.'));
       }
     })();
     return () => {
@@ -61,7 +65,7 @@ export default function CustosPage() {
       setPorTenant(pt);
       setPorServico(ps);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : 'Falha ao carregar.');
+      setErro(mensagemErro(e, 'Falha ao carregar.'));
     }
   }, [api, desde]);
 
@@ -73,7 +77,7 @@ export default function CustosPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-semibold">Custos</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Custos</h1>
 
       {erro && <MensagemErro>{erro}</MensagemErro>}
 
@@ -84,38 +88,35 @@ export default function CustosPage() {
       </div>
 
       <div className="flex items-end gap-3 flex-wrap">
-        <label className="text-sm">
-          <span className="block font-medium text-gray-700">A partir de</span>
-          <input
+        <div className="space-y-2">
+          <Label htmlFor="desde">A partir de</Label>
+          <Input
+            id="desde"
             type="date"
             value={desde}
             onChange={(e) => setDesde(e.target.value)}
-            className="mt-1 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+            className="h-9 w-auto"
           />
-        </label>
+        </div>
         {desde && (
-          <button
-            type="button"
-            onClick={() => setDesde('')}
-            className="text-sm text-gray-600 hover:underline pb-2"
-          >
-            limpar
-          </button>
+          <Button type="button" variant="ghost" size="sm" onClick={() => setDesde('')}>
+            Limpar
+          </Button>
         )}
-        <span className="text-xs text-gray-500 pb-2">
-          Filtra as tabelas abaixo. Em branco = desde sempre.
+        <span className="text-xs text-muted-foreground pb-2">
+          Filtra as tabelas abaixo. Em branco, mostra desde o início.
         </span>
       </div>
 
       <section>
-        <h2 className="text-sm font-medium text-gray-500 mb-2">
+        <h2 className="text-sm font-medium text-muted-foreground mb-2">
           Por tenant{' '}
           {porTenant && porTenant.length > 0 && (
-            <span className="text-gray-400">· total {brl(totalDetalhe)}</span>
+            <span className="text-muted-foreground/70">· total {brl(totalDetalhe)}</span>
           )}
         </h2>
         {porTenant === null ? (
-          <p className="text-sm text-gray-500">carregando…</p>
+          <p className="text-sm text-muted-foreground">Carregando…</p>
         ) : porTenant.length === 0 ? (
           <Vazio>
             Nenhum custo registrado no período. Os valores aparecem aqui quando houver disparos reais
@@ -134,9 +135,9 @@ export default function CustosPage() {
       </section>
 
       <section>
-        <h2 className="text-sm font-medium text-gray-500 mb-2">Por serviço</h2>
+        <h2 className="text-sm font-medium text-muted-foreground mb-2">Por serviço</h2>
         {porServico === null ? (
-          <p className="text-sm text-gray-500">carregando…</p>
+          <p className="text-sm text-muted-foreground">Carregando…</p>
         ) : porServico.length === 0 ? (
           <Vazio>Nenhum custo registrado no período.</Vazio>
         ) : (
@@ -162,24 +163,27 @@ function Tabela({
   linhas: React.ReactNode[][];
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-          <tr>
+    <div className="overflow-x-auto rounded-lg border bg-card">
+      <table className="w-full">
+        <thead>
+          <tr className="border-b bg-muted/50">
             {colunas.map((c) => (
-              <th key={c.label} className={`px-4 py-2 font-medium ${c.num ? 'text-right' : ''}`}>
+              <th
+                key={c.label}
+                className={`p-2 text-xs font-medium ${c.num ? 'text-right' : 'text-left'}`}
+              >
                 {c.label}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody>
           {linhas.map((linha, i) => (
-            <tr key={i} className="hover:bg-gray-50">
+            <tr key={i} className="border-b last:border-0 hover:bg-muted/50">
               {linha.map((cel, j) => (
                 <td
                   key={j}
-                  className={`px-4 py-2 ${colunas[j]?.num ? 'text-right tabular-nums' : ''}`}
+                  className={`p-2 text-sm ${colunas[j]?.num ? 'text-right tabular-nums' : ''}`}
                 >
                   {cel}
                 </td>

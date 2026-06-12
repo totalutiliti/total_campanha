@@ -1,8 +1,14 @@
 'use client';
 
+import { Loader2, Plus, X } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
 
 import { mjmlParaTexto, textoParaMjml } from '../../lib/template-email';
+import { AlertAviso, AlertErro } from '../ui/alerts';
+import { Button, buttonVariants } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 
 export interface Variavel {
   key: string;
@@ -115,155 +121,157 @@ export function TemplateForm({
 
   return (
     <form onSubmit={submeter} className="space-y-4 max-w-2xl">
-      <Campo label="Nome do template">
-        <input
+      <div className="space-y-2">
+        <Label htmlFor="tpl-nome">Nome do template</Label>
+        <Input
+          id="tpl-nome"
           value={nome}
           onChange={(e) => setNome(e.target.value)}
           placeholder={canal === 'EMAIL' ? 'Boas-vindas' : 'Promoção de barras'}
-          className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
         />
-      </Campo>
+      </div>
 
       {canal === 'EMAIL' ? (
         <>
-          <Campo label="Assunto do e-mail">
-            <input
+          <div className="space-y-2">
+            <Label htmlFor="tpl-assunto">Assunto do e-mail</Label>
+            <Input
+              id="tpl-assunto"
               value={assunto}
               onChange={(e) => setAssunto(e.target.value)}
               placeholder="Novidades da {{empresa}}"
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
             />
-          </Campo>
+          </div>
 
           {avancado ? (
-            <Campo label="Conteúdo (MJML — modo avançado)">
+            <div className="space-y-2">
+              <Label htmlFor="tpl-mjml">Conteúdo (MJML — modo avançado)</Label>
               <textarea
+                id="tpl-mjml"
                 value={mjmlBruto}
                 onChange={(e) => setMjmlBruto(e.target.value)}
                 rows={12}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-xs font-mono focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Este template foi escrito em MJML. Edite com cuidado.
               </p>
-            </Campo>
+            </div>
           ) : (
-            <Campo label="Conteúdo do e-mail">
+            <div className="space-y-2">
+              <Label htmlFor="tpl-conteudo">Conteúdo do e-mail</Label>
               <textarea
+                id="tpl-conteudo"
                 value={mensagem}
                 onChange={(e) => setMensagem(e.target.value)}
                 rows={8}
                 placeholder={'Olá {{nome}},\n\nTemos uma novidade para você...'}
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+                className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               />
-              <p className="mt-1 text-xs text-gray-500">
-                Escreva normalmente. Use <code className="bg-gray-100 px-1 rounded">{'{{nome}}'}</code>{' '}
-                para personalizar com dados do contato.
+              <p className="text-xs text-muted-foreground">
+                Escreva normalmente. Use{' '}
+                <code className="bg-muted px-1 rounded">{'{{nome}}'}</code> para personalizar com
+                dados do contato.
               </p>
-            </Campo>
+            </div>
           )}
         </>
       ) : (
         <>
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-            No WhatsApp, a mensagem precisa ser um template <strong>aprovado pela Meta</strong>. Aqui
-            você só aponta para ele pelo nome. O texto em si é o que foi aprovado na sua conta Meta.
-          </div>
+          <AlertAviso>
+            No WhatsApp, a mensagem precisa ser um template <strong>aprovado pela Meta</strong>.
+            Aqui você só aponta para ele pelo nome. O texto em si é o que foi aprovado na sua
+            conta Meta.
+          </AlertAviso>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Campo label="Nome do template na Meta">
-              <input
+            <div className="space-y-2">
+              <Label htmlFor="tpl-meta-nome">Nome do template na Meta</Label>
+              <Input
+                id="tpl-meta-nome"
                 value={metaTemplateName}
                 onChange={(e) => setMetaTemplateName(e.target.value)}
                 placeholder="promo_barras_direcao"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+                className="font-mono"
               />
-            </Campo>
-            <Campo label="Idioma">
-              <input
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tpl-meta-idioma">Idioma</Label>
+              <Input
+                id="tpl-meta-idioma"
                 value={metaLanguage}
                 onChange={(e) => setMetaLanguage(e.target.value)}
                 placeholder="pt_BR"
-                className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
               />
-            </Campo>
+            </div>
           </div>
         </>
       )}
 
-      <fieldset className="rounded-md border border-gray-200 p-3">
-        <legend className="px-1 text-xs font-medium text-gray-700">
+      <fieldset className="rounded-md border p-3">
+        <legend className="px-1 text-xs font-medium text-muted-foreground">
           Variáveis {canal === 'WHATSAPP' ? '(na ordem do template Meta)' : '(personalização)'}
         </legend>
         <div className="space-y-2">
           {variaveis.length === 0 && (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               Nenhuma variável. Use o botão abaixo se quiser personalizar (ex.: nome do cliente).
             </p>
           )}
           {variaveis.map((v, i) => (
             <div key={i} className="flex gap-2 items-center">
-              <input
+              <Input
                 value={v.key}
                 onChange={(e) => setVar(i, 'key', e.target.value)}
                 placeholder="nome"
-                className="w-40 rounded-md border border-gray-300 px-2 py-1.5 text-sm font-mono focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+                className="w-40 h-9 font-mono"
               />
-              <input
+              <Input
                 value={v.exemplo}
                 onChange={(e) => setVar(i, 'exemplo', e.target.value)}
                 placeholder="exemplo (ex.: João)"
-                className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+                className="flex-1 h-9"
               />
               <button
                 type="button"
                 onClick={() => setVariaveis((vs) => vs.filter((_, j) => j !== i))}
-                className="text-xs text-red-700 hover:underline px-1"
+                className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-destructive hover:bg-destructive/10 transition-colors"
               >
+                <X className="h-3 w-3" />
                 remover
               </button>
             </div>
           ))}
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1"
             onClick={() => setVariaveis((vs) => [...vs, { key: '', exemplo: '' }])}
-            className="text-sm rounded-md border border-gray-300 px-3 py-1.5 hover:bg-gray-50"
           >
-            + Variável
-          </button>
+            <Plus className="h-4 w-4" />
+            Variável
+          </Button>
         </div>
       </fieldset>
 
-      {mensagemErro && (
-        <p role="alert" className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3">
-          {mensagemErro}
-        </p>
-      )}
+      {mensagemErro && <AlertErro>{mensagemErro}</AlertErro>}
 
       <div className="flex flex-wrap gap-2 items-center">
-        <button
-          type="submit"
-          disabled={salvando}
-          className="rounded-md bg-gray-900 text-white px-4 py-2 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {salvando ? 'Salvando…' : textoBotao}
-        </button>
-        <a
-          href="/templates"
-          className="rounded-md border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-        >
+        <Button type="submit" disabled={salvando}>
+          {salvando ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Salvando...
+            </>
+          ) : (
+            textoBotao
+          )}
+        </Button>
+        <Link href="/templates" className={buttonVariants({ variant: 'outline' })}>
           Cancelar
-        </a>
+        </Link>
         {rodape}
       </div>
     </form>
-  );
-}
-
-function Campo({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block">
-      <span className="text-sm font-medium text-gray-900">{label}</span>
-      {children}
-    </label>
   );
 }

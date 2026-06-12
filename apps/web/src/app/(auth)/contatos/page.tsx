@@ -1,10 +1,16 @@
 'use client';
 
+import { Check, Download, Loader2, Plus, Upload, Users } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import { AlertErro } from '../../../components/ui/alerts';
+import { Badge } from '../../../components/ui/badge';
+import { Button, buttonVariants } from '../../../components/ui/button';
+import { Input } from '../../../components/ui/input';
 import { useAuth } from '../../../lib/auth/context';
+import { cn } from '../../../lib/cn';
 import { baixarModeloXlsx } from '../../../lib/csv/xlsx';
 import { mensagemErro } from '../../../lib/erro';
 
@@ -98,64 +104,66 @@ export default function ContatosListPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-        <h1 className="text-2xl font-semibold">Contatos</h1>
-        <div className="flex gap-2">
-          <button
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-4">
+        <h1 className="text-3xl font-bold">Contatos</h1>
+        <div className="flex flex-wrap gap-2">
+          <Button
             type="button"
+            variant="outline"
             onClick={() =>
               baixarModeloXlsx().catch(() => setErro('Não foi possível gerar o modelo. Tente de novo.'))
             }
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+            className="gap-2"
             title="Baixa uma planilha Excel no formato certo para preencher e importar"
           >
+            <Download className="h-4 w-4" />
             Baixar modelo
-          </button>
+          </Button>
           <Link
             href="/contatos/importar"
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+            className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
           >
+            <Upload className="h-4 w-4" />
             Importar contatos
           </Link>
-          <Link
-            href="/contatos/novo"
-            className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
-          >
+          <Link href="/contatos/novo" className={cn(buttonVariants(), 'gap-2')}>
+            <Plus className="h-4 w-4" />
             Adicionar contato
           </Link>
         </div>
       </div>
+      <p className="mb-4 text-sm text-muted-foreground">
+        Sua base de clientes — é daqui que saem os grupos das campanhas.
+      </p>
 
-      <input
+      <Input
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
         placeholder="Buscar por nome, e-mail ou telefone…"
-        className="mb-3 w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+        className="mb-3 max-w-md"
       />
 
-      {erro && (
-        <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-md p-3 mb-3">
-          {erro}
-        </p>
-      )}
+      {erro && <AlertErro className="mb-3">{erro}</AlertErro>}
 
       {sel.size > 0 && (
-        <div className="mb-3 flex items-center gap-3 flex-wrap rounded-md border border-gray-900 bg-gray-50 px-3 py-2 text-sm">
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-primary bg-primary/5 px-3 py-2 text-sm">
           <span className="font-medium">
             {sel.size} selecionado{sel.size === 1 ? '' : 's'}
           </span>
-          <button
-            type="button"
-            onClick={criarGrupoECampanha}
-            disabled={criando}
-            className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none disabled:opacity-60"
-          >
-            {criando ? 'Criando grupo…' : 'Criar grupo e campanha'}
-          </button>
+          <Button type="button" size="sm" onClick={criarGrupoECampanha} disabled={criando}>
+            {criando ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Criando grupo…
+              </>
+            ) : (
+              'Criar grupo e campanha'
+            )}
+          </Button>
           <button
             type="button"
             onClick={() => setSel(new Set())}
-            className="text-gray-600 hover:underline"
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground hover:underline"
           >
             Limpar seleção
           </button>
@@ -163,28 +171,33 @@ export default function ContatosListPage() {
       )}
 
       {dados === null ? (
-        <p className="text-sm text-gray-500">carregando…</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Carregando contatos…
+        </p>
       ) : total === 0 ? (
-        <div className="rounded-lg border border-dashed border-gray-300 p-8 text-center">
+        <div className="rounded-lg border border-dashed p-8 text-center">
           {busca ? (
-            <p className="text-sm text-gray-600">Nenhum contato encontrado para “{busca}”.</p>
+            <p className="text-sm text-muted-foreground">
+              Nenhum contato encontrado para “{busca}”.
+            </p>
           ) : (
             <>
-              <p className="text-sm font-medium text-gray-900">Sua base de contatos está vazia.</p>
-              <p className="mt-1 text-sm text-gray-600">
+              <Users className="mx-auto h-10 w-10 text-muted-foreground/40" />
+              <p className="mt-3 text-sm font-medium">Sua base de contatos está vazia.</p>
+              <p className="mt-1 text-sm text-muted-foreground">
                 Importe sua planilha de clientes ou adicione um contato manualmente para começar.
               </p>
               <div className="mt-4 flex justify-center gap-2">
-                <Link
-                  href="/contatos/importar"
-                  className="rounded-md bg-gray-900 text-white px-3 py-1.5 text-sm font-medium hover:bg-gray-700"
-                >
+                <Link href="/contatos/importar" className={cn(buttonVariants(), 'gap-2')}>
+                  <Upload className="h-4 w-4" />
                   Importar contatos
                 </Link>
                 <Link
                   href="/contatos/novo"
-                  className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className={cn(buttonVariants({ variant: 'outline' }), 'gap-2')}
                 >
+                  <Plus className="h-4 w-4" />
                   Adicionar contato
                 </Link>
               </div>
@@ -193,51 +206,62 @@ export default function ContatosListPage() {
         </div>
       ) : (
         <>
-          <p className="text-xs text-gray-500 mb-3">
+          <p className="mb-3 text-xs text-muted-foreground">
             {total} contato{total === 1 ? '' : 's'} no total
-            {mostrando < total ? ` · mostrando os primeiros ${mostrando}` : ''} · marque para criar um
-            grupo e enviar.
+            {mostrando < total ? ` · mostrando os primeiros ${mostrando}` : ''} · marque para criar
+            um grupo e enviar.
           </p>
           <ul className="space-y-2">
             {dados.itens.map((c) => (
               <li
                 key={c.id}
-                className={`flex items-center gap-3 rounded-lg border bg-white p-3 text-sm ${
-                  sel.has(c.id) ? 'border-gray-900' : 'border-gray-200'
-                }`}
+                className={cn(
+                  'flex items-center gap-3 rounded-lg border bg-card p-3 text-sm text-card-foreground shadow-sm transition-colors hover:bg-muted/50',
+                  sel.has(c.id) && 'border-primary bg-primary/5',
+                )}
               >
                 <input
                   type="checkbox"
                   checked={sel.has(c.id)}
                   onChange={() => alternar(c.id)}
                   aria-label={`Selecionar ${c.nome ?? 'contato'}`}
-                  className="accent-gray-900 shrink-0 h-4 w-4"
+                  className="h-4 w-4 shrink-0 rounded accent-primary"
                 />
                 <Link
                   href={`/contatos/${c.id}`}
-                  className="flex-1 min-w-0 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none rounded"
+                  className="min-w-0 flex-1 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <div className="font-medium truncate">{c.nome ?? '(sem nome)'}</div>
-                      <div className="text-xs text-gray-500 truncate">
+                      <div className="truncate font-medium">{c.nome ?? '(sem nome)'}</div>
+                      <div className="truncate text-xs text-muted-foreground">
                         {c.email ?? '—'} · {c.telefoneE164 ?? '—'}
                       </div>
                       {c.tags.length > 0 && (
-                        <div className="mt-1 flex gap-1 flex-wrap">
+                        <div className="mt-1 flex flex-wrap gap-1">
                           {c.tags.map((t) => (
-                            <span key={t} className="text-xs rounded bg-gray-100 px-1.5 py-0.5">
+                            <Badge key={t} variant="secondary" className="font-normal">
                               {t}
-                            </span>
+                            </Badge>
                           ))}
                         </div>
                       )}
                     </div>
-                    <div className="text-xs text-right shrink-0">
-                      {c.optInEmail && <div className="text-green-700">✓ E-mail</div>}
-                      {c.optInWhatsapp && <div className="text-green-700">✓ WhatsApp</div>}
+                    <div className="shrink-0 text-right text-xs">
+                      {c.optInEmail && (
+                        <div className="flex items-center justify-end gap-1 text-green-700 dark:text-green-400">
+                          <Check className="h-3 w-3" />
+                          E-mail
+                        </div>
+                      )}
+                      {c.optInWhatsapp && (
+                        <div className="flex items-center justify-end gap-1 text-green-700 dark:text-green-400">
+                          <Check className="h-3 w-3" />
+                          WhatsApp
+                        </div>
+                      )}
                       {!c.optInEmail && !c.optInWhatsapp && (
-                        <div className="text-gray-400">sem opt-in</div>
+                        <div className="text-muted-foreground">sem opt-in</div>
                       )}
                     </div>
                   </div>

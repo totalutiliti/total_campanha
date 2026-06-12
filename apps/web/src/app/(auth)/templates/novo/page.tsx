@@ -1,5 +1,6 @@
 'use client';
 
+import { ArrowLeft, Mail, MessageSquare } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -36,32 +37,41 @@ export default function NovoTemplatePage() {
 
   return (
     <div>
-      <Link href="/templates" className="text-xs text-gray-600 hover:text-gray-900">
-        ← Voltar para mensagens
+      <Link
+        href="/templates"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Voltar para mensagens
       </Link>
-      <h1 className="mt-2 mb-4 text-2xl font-semibold">Nova mensagem</h1>
+      <h1 className="mt-2 text-3xl font-bold">Nova mensagem</h1>
+      <p className="mb-6 mt-1 text-sm text-muted-foreground">
+        Crie o texto que as suas campanhas vão enviar.
+      </p>
 
       {!canal ? (
         <div>
-          <p className="text-sm text-gray-600 mb-3">Para qual canal é esta mensagem?</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-2xl">
+          <p className="mb-3 text-sm text-muted-foreground">Para qual canal é esta mensagem?</p>
+          <div className="grid max-w-2xl grid-cols-1 gap-3 sm:grid-cols-2">
             <button
               type="button"
               onClick={() => setCanal('WHATSAPP')}
-              className="rounded-lg border border-gray-200 bg-white p-4 text-left hover:border-gray-900 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+              className="rounded-lg border bg-card p-4 text-left text-card-foreground shadow-sm transition-colors hover:border-primary hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <div className="font-medium">WhatsApp</div>
-              <div className="text-xs text-gray-500 mt-1">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              <div className="mt-2 font-medium">WhatsApp</div>
+              <div className="mt-1 text-xs text-muted-foreground">
                 Aponta para um template aprovado na sua conta Meta.
               </div>
             </button>
             <button
               type="button"
               onClick={() => setCanal('EMAIL')}
-              className="rounded-lg border border-gray-200 bg-white p-4 text-left hover:border-gray-900 focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:outline-none"
+              className="rounded-lg border bg-card p-4 text-left text-card-foreground shadow-sm transition-colors hover:border-primary hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <div className="font-medium">E-mail</div>
-              <div className="text-xs text-gray-500 mt-1">
+              <Mail className="h-5 w-5 text-primary" />
+              <div className="mt-2 font-medium">E-mail</div>
+              <div className="mt-1 text-xs text-muted-foreground">
                 Escreva o assunto e o conteúdo aqui mesmo.
               </div>
             </button>
@@ -69,12 +79,13 @@ export default function NovoTemplatePage() {
         </div>
       ) : (
         <>
-          <p className="text-sm text-gray-600 mb-4">
-            Canal: <strong>{canal === 'EMAIL' ? 'E-mail' : 'WhatsApp'}</strong>{' '}
+          <p className="mb-4 text-sm text-muted-foreground">
+            Canal:{' '}
+            <strong className="text-foreground">{canal === 'EMAIL' ? 'E-mail' : 'WhatsApp'}</strong>{' '}
             <button
               type="button"
               onClick={() => setCanal(null)}
-              className="text-gray-500 hover:underline"
+              className="text-primary hover:underline"
             >
               (trocar)
             </button>
