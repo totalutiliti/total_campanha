@@ -121,8 +121,14 @@ Botão **"Testar conexão"** → plataforma:
 ## 6. Configurar webhook na Meta (do lado do tenant)
 
 Plataforma gera, para cada tenant:
-- **Callback URL:** `https://api.totalcampanha.com.br/webhooks/meta/{tenantSlug}`
+- **Callback URL:** `https://api.totalcampanha.com.br/api/v1/webhooks/meta/{tenantSlug}/{webhookSecret}`
 - **Verify Token:** valor de `webhook_secret` na tabela (32 bytes hex).
+
+> O secret faz parte da URL desde 06/2026: é a autenticação do POST de eventos
+> (a Meta não assina o payload sem App Secret por tenant, e o slug é público —
+> aparece na página de opt-in). POST com secret errado é descartado em silêncio
+> (200 sem processar); handshake errado falha alto (403) para o tenant ver na
+> hora que configurou errado.
 
 No Meta Developers > app > WhatsApp > Configuração:
 1. **Callback URL:** colar URL acima.

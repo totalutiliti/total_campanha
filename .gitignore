@@ -25,6 +25,8 @@ coverage/
 !.env.example
 *.publishsettings
 gitleaks-report.json
+# Arquivos locais de acesso/credenciais (ex.: instrucoes/acessos-*.local.md)
+*.local.md
 
 # IDE
 .vscode/

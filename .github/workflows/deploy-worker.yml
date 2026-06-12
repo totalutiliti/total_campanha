@@ -24,6 +24,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # Blindagem (CLAUDE.md): deploy de PROD SÓ a partir da main.
+      - name: Guarda de ref (só main)
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Deploy de PROD só a partir da main (ref atual: $GITHUB_REF)."
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Setup pnpm
@@ -39,6 +47,9 @@ jobs:
 
       - name: Install
         run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm --filter @total-campanha/db generate
 
       - name: Lint, typecheck, test
         run: |
@@ -80,6 +91,11 @@ jobs:
           done
           echo "worker não ficou Running"
           exit 1
+
+      # O worker participa do fluxo de disparo — valida a plataforma inteira
+      # após o deploy (health + logins + telas críticas).
+      - name: Smoke test
+        run: bash scripts/smoke-test-prod.sh
 
       - name: Rollback on failure
         if: failure()

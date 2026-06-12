@@ -80,13 +80,26 @@ az containerapp create -n tc-worker-dev -g $RG --yaml tc-worker.yaml
 ```
 
 ### Contrato de env dos apps (ver `apps/api/src/config/env.ts`)
-Obrigatórias na API/worker: `DATABASE_URL` (app_user), `DATABASE_MIGRATION_URL`
+Obrigatórias na API: `DATABASE_URL` (**app_user**), `DATABASE_MIGRATION_URL`
 (migration_user, BYPASSRLS — necessário p/ o painel Super Admin cross-tenant),
 `REDIS_URL=redis://tc-redis-dev:6379`, `AUTH_PEPPER`, `JWT_ACCESS_SECRET`,
 `JWT_REFRESH_SECRET`, `TOKEN_KMS_KEY`. API ainda: `CORS_ORIGINS` (FQDN do web),
 `API_PUBLIC_URL`, `COOKIE_SECURE=true`, `COOKIE_SAMESITE=none`, `COOKIE_DOMAIN`
-(host da API), URLs públicas de opt-in/out e webhook. Web (runtime): `PORT=3000`,
-`HOSTNAME=0.0.0.0` (Next standalone bind), `NODE_ENV=production`.
+(host da API), URLs públicas de opt-in/out e webhook.
+
+⚠️ **Worker:** `DATABASE_URL` do worker aponta para **migration_user (BYPASSRLS)**,
+NÃO app_user — os processors cross-tenant (retry, verificar-emails, trial) varrem
+todos os tenants e, como app_user, o RLS retorna 0 linhas **silenciosamente**
+(retry/verificação/expiração de trial param de funcionar sem nenhum erro de log).
+Incidente em 12/06/2026: o deploy original usou app_user e esses 3 processors
+ficaram inertes por 10 dias. Ver `apps/worker/src/processors/verificar-emails.processor.ts`.
+
+⚠️ **Web (runtime):** `PORT=3000`, `HOSTNAME=0.0.0.0` (Next standalone bind),
+`NODE_ENV=production` **e `API_BASE_URL`** (URL externa da API, sem `/api/v1`) —
+usado pelos server components das páginas públicas `/p/opt-in` e `/p/opt-out`
+(`apps/web/src/lib/api.ts`). Sem ele o SSR cai no fallback `localhost:3001` e as
+páginas públicas de LGPD retornam **404**. Incidente em 12/06/2026: deploy original
+não setava e o opt-in público ficou fora do ar até a auditoria detectar.
 
 ## Custo (ordem de grandeza)
 ACR Basic ~US$5 + Postgres B1ms ~US$13 + Redis min=1 ~US$13 + api/web scale-to-zero

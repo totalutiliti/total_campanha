@@ -331,14 +331,18 @@ resource storagePeDns 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2
 }
 
 // ---------------------------------------------------------------------------
-// Azure Container Registry
+// Azure Container Registry — COMPARTILHADO entre ambientes (naming sem
+// sufixo de ambiente; nome de ACR é globalmente único). O registro
+// `acrtotalcampanha01` JÁ EXISTE em rg-totalcampanha-dev desde o deploy dev
+// de 06/2026 — este template NÃO o cria; referencia o existente e concede
+// AcrPull via módulo no RG dele.
 // ---------------------------------------------------------------------------
-resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
+@description('Resource group onde o ACR compartilhado já existe.')
+param acrResourceGroup string = 'rg-totalcampanha-dev'
+
+resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
   name: nomes.acr
-  location: location
-  tags: tags
-  sku: { name: 'Standard' }
-  properties: { adminUserEnabled: false }
+  scope: resourceGroup(acrResourceGroup)
 }
 
 // ---------------------------------------------------------------------------
@@ -451,6 +455,23 @@ resource appApi 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'tc-api'
           image: quickstartImage
           resources: { cpu: 1, memory: '2Gi' }
+          // Probes apontam para a app real (instrucao_azure.md seção 5). Com a
+          // imagem quickstart inicial elas falham — esperado; a 1ª revision
+          // saudável é a do deploy real via workflow.
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: { path: '/api/v1/health/live', port: 3001 }
+              periodSeconds: 30
+              initialDelaySeconds: 10
+            }
+            {
+              type: 'Readiness'
+              httpGet: { path: '/api/v1/health/ready', port: 3001 }
+              periodSeconds: 10
+              initialDelaySeconds: 5
+            }
+          ]
         }
       ]
       scale: {
@@ -494,6 +515,20 @@ resource appWeb 'Microsoft.App/containerApps@2024-03-01' = {
           name: 'tc-web'
           image: quickstartImage
           resources: { cpu: 1, memory: '2Gi' }
+          probes: [
+            {
+              type: 'Liveness'
+              httpGet: { path: '/login', port: 3000 }
+              periodSeconds: 30
+              initialDelaySeconds: 10
+            }
+            {
+              type: 'Readiness'
+              httpGet: { path: '/login', port: 3000 }
+              periodSeconds: 10
+              initialDelaySeconds: 5
+            }
+          ]
         }
       ]
       scale: {
@@ -547,7 +582,6 @@ resource appWorker 'Microsoft.App/containerApps@2024-03-01' = {
 // ---------------------------------------------------------------------------
 // IDs públicos de role definitions built-in do Azure (constantes documentadas
 // pela Microsoft — NÃO são segredos).
-var acrPullRoleId = '7f951dda-4ed3-4680-a7ca-43fe172d538d' // AcrPull
 var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
 
 var apps = [
@@ -556,17 +590,15 @@ var apps = [
   { nome: 'worker', principalId: appWorker.identity.principalId }
 ]
 
-resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
-  for app in apps: {
-    name: guid(acr.id, app.nome, 'acrpull')
-    scope: acr
-    properties: {
-      roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', acrPullRoleId)
-      principalId: app.principalId
-      principalType: 'ServicePrincipal'
-    }
+// AcrPull no RG do ACR compartilhado (cross-RG exige module com scope lá).
+module acrPull 'modules/acr-pull.bicep' = {
+  name: 'acr-pull-${environment}'
+  scope: resourceGroup(acrResourceGroup)
+  params: {
+    acrName: nomes.acr
+    principalIds: [for app in apps: app.principalId]
   }
-]
+}
 
 resource kvSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
   for app in apps: {
@@ -607,6 +639,110 @@ resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
         contactEmails: [alertEmail]
       }
     }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Alertas de métrica + Action Group (instrucao_azure.md seção 10)
+// ---------------------------------------------------------------------------
+resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
+  name: 'ag-totalcampanha-${environment}'
+  location: 'global'
+  tags: tags
+  properties: {
+    groupShortName: 'tc-${environment}'
+    enabled: true
+    emailReceivers: [
+      {
+        name: 'operacao'
+        emailAddress: alertEmail
+        useCommonAlertSchema: true
+      }
+    ]
+  }
+}
+
+// Erros 5xx na API (App Insights requests/failed) > 5 em 5 min.
+resource alertApi5xx 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-tc-api-5xx-${environment}'
+  location: 'global'
+  tags: tags
+  properties: {
+    severity: 1
+    enabled: true
+    scopes: [appInsights.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT5M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'falhas5xx'
+          metricName: 'requests/failed'
+          operator: 'GreaterThan'
+          threshold: 5
+          timeAggregation: 'Count'
+        }
+      ]
+    }
+    actions: [{ actionGroupId: actionGroup.id }]
+  }
+}
+
+// PostgreSQL CPU > 80% por 15 min.
+resource alertPgCpu 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-pg-cpu-${environment}'
+  location: 'global'
+  tags: tags
+  properties: {
+    severity: 2
+    enabled: true
+    scopes: [postgres.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'cpuAlta'
+          metricName: 'cpu_percent'
+          operator: 'GreaterThan'
+          threshold: 80
+          timeAggregation: 'Average'
+        }
+      ]
+    }
+    actions: [{ actionGroupId: actionGroup.id }]
+  }
+}
+
+// Redis memória > 90% (noeviction: estouro de memória = jobs BullMQ travando).
+resource alertRedisMem 'Microsoft.Insights/metricAlerts@2018-03-01' = {
+  name: 'alert-redis-mem-${environment}'
+  location: 'global'
+  tags: tags
+  properties: {
+    severity: 1
+    enabled: true
+    scopes: [redis.id]
+    evaluationFrequency: 'PT5M'
+    windowSize: 'PT15M'
+    criteria: {
+      'odata.type': 'Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria'
+      allOf: [
+        {
+          criterionType: 'StaticThresholdCriterion'
+          name: 'memoriaAlta'
+          metricName: 'usedmemorypercentage'
+          operator: 'GreaterThan'
+          threshold: 90
+          timeAggregation: 'Maximum'
+        }
+      ]
+    }
+    actions: [{ actionGroupId: actionGroup.id }]
   }
 }
 

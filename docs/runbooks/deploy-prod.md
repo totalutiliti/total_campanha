@@ -182,7 +182,9 @@ Toda linha é adicionada após um deploy. Nunca editar linhas antigas.
 
 ## §11 — Rollback `[BLOQUEANTE]` (~30s)
 
-Trocar o tráfego para a revisão anterior (não precisa rebuildar):
+Reativar a revisão anterior (não precisa rebuildar). Os apps usam
+`activeRevisionsMode: Single` — o rollback é `revision activate` (traffic-split
+com `--revision-weight` só existe no modo Multiple):
 
 ```bash
 APP=tc-api-prod   # ou tc-web-prod / tc-worker-prod
@@ -191,9 +193,9 @@ APP=tc-api-prod   # ou tc-web-prod / tc-worker-prod
 az containerapp revision list -g $RESOURCE_GROUP -n $APP \
   --query "sort_by(@,&properties.createdTime)[].{nome:name,ativa:properties.active}" -o table
 
-# 2. Mandar 100% do tráfego para a revisão anterior.
-az containerapp ingress traffic set -g $RESOURCE_GROUP -n $APP \
-  --revision-weight <revisao-anterior>=100
+# 2. Reativar a revisão anterior (vira a única ativa no modo Single).
+az containerapp revision activate -g $RESOURCE_GROUP -n $APP \
+  --revision <revisao-anterior>
 
 # 3. Confirmar.
 curl -s https://api.totalcampanha.com.br/api/v1/health/ready
