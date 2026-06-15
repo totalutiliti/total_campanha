@@ -1,16 +1,25 @@
 // ============================================================================
-// Total Campanha — infraestrutura PROD (Azure).
+// Total Campanha — infraestrutura PROD ENXUTA (lançamento / baixo custo).
 //
-// Deploy (ver instrucoes/instrucao_deploys.md seção 3):
+// Objetivo: rodar o produto completo pelo menor custo possível, mantendo
+// backup gerenciado, segredos no Key Vault e dados em brazilsouth (LGPD).
+// ~R$ 250-400/mês. Quando a demanda crescer, migrar para `main.bicep` (HA).
+//
+// O que MUDA vs main.bicep (HA):
+//   - Postgres B1ms Burstable, SEM HA, 32GB, backup 7d local (era D2ds_v4 GP +
+//     ZoneRedundant + 128GB + 35d geo). SEM PgBouncer (não suportado no Burstable).
+//   - Redis Basic C0 (era Standard C1).
+//   - Storage LRS (era GRS).
+//   - SEM VNet / Private Endpoints / DNS privado → endpoints públicos + firewall + TLS.
+//   - Container Apps api/web em scale-to-zero (min 0); worker min 1 (processa a fila).
+//     CPU 0.5 / 1Gi (era 1 / 2Gi).
+//   - Key Vault público (RBAC) → resolve o blocker do smoke-test em runner público.
+//
+// Deploy:
 //   az deployment group create -g rg-totalcampanha-prod \
-//     --template-file infra/main.bicep \
-//     --parameters infra/main.parameters.prod.jsonc \
+//     --template-file infra/main.lean.bicep \
+//     --parameters infra/main.parameters.prod-lean.jsonc \
 //     --parameters postgresAdminPassword="$PGPASS" --parameters baseDomain=""
-//
-// Custom domain é 2 fases: deploy 1x com baseDomain='' (captura
-// customDomainVerificationId), configura DNS, redeploy com baseDomain preenchido.
-//
-// O resource group deve ser criado ANTES (az group create).
 // ============================================================================
 
 targetScope = 'resourceGroup'
@@ -18,7 +27,7 @@ targetScope = 'resourceGroup'
 // ---------------------------------------------------------------------------
 // Parâmetros
 // ---------------------------------------------------------------------------
-@description('Região Azure. Brazil South para tudo (instrucao_azure.md seção 1).')
+@description('Região Azure. Brazil South para tudo (LGPD: dados no Brasil).')
 param location string = 'brazilsouth'
 
 @description('Ambiente. Compõe o naming de todos os recursos.')
@@ -32,17 +41,17 @@ param postgresAdminPassword string
 @description('Domínio base. Vazio na Fase A; "totalcampanha.com.br" na Fase B.')
 param baseDomain string = ''
 
-@description('Tag da imagem dos Container Apps. Os workflows de deploy sobrescrevem via az containerapp update.')
-param imageTag string = 'prod'
-
-@description('Budget mensal em R$ (BRL). Alerta em 80%, freeze em 100% — RULES 6.4.')
-param budgetMensalBrl int = 3000
+@description('Budget mensal em R$ (BRL). Teto enxuto para pegar surpresa cedo — RULES 6.4.')
+param budgetMensalBrl int = 800
 
 @description('Email do João para alertas de budget e métricas.')
 param alertEmail string = 'joao@totalutiliti.com.br'
 
+@description('Resource group onde o ACR compartilhado já existe.')
+param acrResourceGroup string = 'rg-totalcampanha-dev'
+
 // ---------------------------------------------------------------------------
-// Variáveis — naming convention (instrucao_azure.md seção 1)
+// Naming (instrucao_azure.md seção 1)
 // ---------------------------------------------------------------------------
 var sufixo = 'totalcampanha-${environment}'
 var tags = {
@@ -50,10 +59,10 @@ var tags = {
   Project: 'totalcampanha'
   Owner: 'totalutiliti'
   CentroDeCusto: 'totalcampanha-${environment}'
+  Perfil: 'lean'
 }
 
 var nomes = {
-  vnet: 'vnet-${sufixo}'
   postgres: 'pg-${sufixo}'
   redis: 'redis-${sufixo}'
   acr: 'acrtotalcampanha01'
@@ -65,9 +74,10 @@ var nomes = {
 }
 
 var dbName = 'total_campanha_${environment}'
+var quickstartImage = 'mcr.microsoft.com/k8se/quickstart:latest'
 
 // ---------------------------------------------------------------------------
-// Observabilidade — Log Analytics + Application Insights
+// Observabilidade — Log Analytics (com cap diário p/ custo) + App Insights
 // ---------------------------------------------------------------------------
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   name: nomes.logAnalytics
@@ -76,6 +86,7 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
   properties: {
     sku: { name: 'PerGB2018' }
     retentionInDays: 30
+    workspaceCapping: { dailyQuotaGb: 1 } // teto de ingestão p/ não estourar custo
   }
 }
 
@@ -91,120 +102,23 @@ resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
 }
 
 // ---------------------------------------------------------------------------
-// Rede — VNet + 3 subnets + private DNS zones
-// ---------------------------------------------------------------------------
-resource vnet 'Microsoft.Network/virtualNetworks@2023-11-01' = {
-  name: nomes.vnet
-  location: location
-  tags: tags
-  properties: {
-    addressSpace: { addressPrefixes: ['10.20.0.0/16'] }
-    subnets: [
-      {
-        // Container Apps Environment — precisa de /23 dedicado.
-        name: 'subnet-cae'
-        properties: { addressPrefix: '10.20.0.0/23' }
-      }
-      {
-        // PostgreSQL Flexible — subnet delegada.
-        name: 'subnet-db'
-        properties: {
-          addressPrefix: '10.20.2.0/24'
-          delegations: [
-            {
-              name: 'pgflex'
-              properties: { serviceName: 'Microsoft.DBforPostgreSQL/flexibleServers' }
-            }
-          ]
-        }
-      }
-      {
-        // Private endpoints (Redis, Storage, Key Vault).
-        name: 'subnet-pe'
-        properties: {
-          addressPrefix: '10.20.3.0/24'
-          privateEndpointNetworkPolicies: 'Disabled'
-        }
-      }
-    ]
-  }
-}
-
-resource subnetCae 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' existing = {
-  parent: vnet
-  name: 'subnet-cae'
-}
-resource subnetDb 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' existing = {
-  parent: vnet
-  name: 'subnet-db'
-}
-resource subnetPe 'Microsoft.Network/virtualNetworks/subnets@2023-11-01' existing = {
-  parent: vnet
-  name: 'subnet-pe'
-}
-
-// Private DNS zones.
-var dnsZonesPe = [
-  'privatelink.redis.cache.windows.net'
-  'privatelink.blob.core.windows.net'
-  'privatelink.vaultcore.azure.net'
-]
-
-resource pgDnsZone 'Microsoft.Network/privateDnsZones@2020-06-01' = {
-  name: 'private.postgres.database.azure.com'
-  location: 'global'
-  tags: tags
-}
-resource pgDnsLink 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = {
-  parent: pgDnsZone
-  name: 'link-vnet'
-  location: 'global'
-  properties: {
-    registrationEnabled: false
-    virtualNetwork: { id: vnet.id }
-  }
-}
-
-resource peDnsZones 'Microsoft.Network/privateDnsZones@2020-06-01' = [
-  for z in dnsZonesPe: {
-    name: z
-    location: 'global'
-    tags: tags
-  }
-]
-resource peDnsLinks 'Microsoft.Network/privateDnsZones/virtualNetworkLinks@2020-06-01' = [
-  for (z, i) in dnsZonesPe: {
-    name: '${z}/link-vnet'
-    location: 'global'
-    properties: {
-      registrationEnabled: false
-      virtualNetwork: { id: vnet.id }
-    }
-    dependsOn: [peDnsZones]
-  }
-]
-
-// ---------------------------------------------------------------------------
-// PostgreSQL Flexible Server — HA zone-redundant (instrucao_azure.md seção 5)
+// PostgreSQL Flexible Server — B1ms Burstable, SEM HA, público + firewall.
+// SEM PgBouncer (não suportado no tier Burstable) — app conecta direto na 5432.
 // ---------------------------------------------------------------------------
 resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
   name: nomes.postgres
   location: location
   tags: tags
-  sku: { name: 'Standard_D2ds_v4', tier: 'GeneralPurpose' }
+  sku: { name: 'Standard_B1ms', tier: 'Burstable' }
   properties: {
     version: '16'
     administratorLogin: 'tcadmin'
     administratorLoginPassword: postgresAdminPassword
-    storage: { storageSizeGB: 128, autoGrow: 'Enabled' }
-    backup: { backupRetentionDays: 35, geoRedundantBackup: 'Enabled' }
-    highAvailability: { mode: 'ZoneRedundant' }
-    network: {
-      delegatedSubnetResourceId: subnetDb.id
-      privateDnsZoneArmResourceId: pgDnsZone.id
-    }
+    storage: { storageSizeGB: 32, autoGrow: 'Enabled' }
+    backup: { backupRetentionDays: 7, geoRedundantBackup: 'Disabled' }
+    highAvailability: { mode: 'Disabled' }
+    network: { publicNetworkAccess: 'Enabled' }
   }
-  dependsOn: [pgDnsLink]
 }
 
 resource postgresDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08-01' = {
@@ -213,77 +127,49 @@ resource postgresDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2024-08
   properties: { charset: 'UTF8', collation: 'en_US.utf8' }
 }
 
-resource pgbouncer 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2024-08-01' = {
+// Libera acesso dos serviços Azure (Container Apps tem IP de saída dinâmico).
+resource pgFirewallAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2024-08-01' = {
   parent: postgres
-  name: 'pgbouncer.enabled'
-  properties: { value: 'true', source: 'user-override' }
+  name: 'AllowAllAzureServicesAndResourcesWithinAzureIps'
+  properties: { startIpAddress: '0.0.0.0', endIpAddress: '0.0.0.0' }
 }
+
 resource pgPreload 'Microsoft.DBforPostgreSQL/flexibleServers/configurations@2024-08-01' = {
   parent: postgres
   name: 'shared_preload_libraries'
-  properties: { value: 'pg_stat_statements,pgaudit', source: 'user-override' }
-  dependsOn: [pgbouncer]
+  properties: { value: 'pg_stat_statements', source: 'user-override' }
+  dependsOn: [pgFirewallAzure]
 }
 
 // ---------------------------------------------------------------------------
-// Redis — Standard C1, noeviction (CRÍTICO para BullMQ)
+// Redis — Basic C0 (250MB), público + keys, noeviction (CRÍTICO para BullMQ).
 // ---------------------------------------------------------------------------
 resource redis 'Microsoft.Cache/redis@2024-03-01' = {
   name: nomes.redis
   location: location
   tags: tags
   properties: {
-    sku: { name: 'Standard', family: 'C', capacity: 1 }
+    sku: { name: 'Basic', family: 'C', capacity: 0 }
     enableNonSslPort: false
     minimumTlsVersion: '1.2'
-    publicNetworkAccess: 'Disabled'
+    publicNetworkAccess: 'Enabled'
     redisConfiguration: { 'maxmemory-policy': 'noeviction' }
   }
 }
 
-resource redisPe 'Microsoft.Network/privateEndpoints@2023-11-01' = {
-  name: 'pe-${nomes.redis}'
-  location: location
-  tags: tags
-  properties: {
-    subnet: { id: subnetPe.id }
-    privateLinkServiceConnections: [
-      {
-        name: 'redis'
-        properties: {
-          privateLinkServiceId: redis.id
-          groupIds: ['redisCache']
-        }
-      }
-    ]
-  }
-}
-resource redisPeDns 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-11-01' = {
-  parent: redisPe
-  name: 'default'
-  properties: {
-    privateDnsZoneConfigs: [
-      {
-        name: 'redis'
-        properties: { privateDnsZoneId: peDnsZones[0].id }
-      }
-    ]
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Storage Account — GRS, soft delete 14d, private endpoint
+// Storage Account — LRS, soft delete 14d, público (acesso via keys/SAS).
 // ---------------------------------------------------------------------------
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   name: nomes.storage
   location: location
   tags: tags
-  sku: { name: 'Standard_GRS' }
+  sku: { name: 'Standard_LRS' }
   kind: 'StorageV2'
   properties: {
     minimumTlsVersion: 'TLS1_2'
     allowBlobPublicAccess: false
-    publicNetworkAccess: 'Disabled'
+    publicNetworkAccess: 'Enabled'
     supportsHttpsTrafficOnly: true
   }
 }
@@ -300,53 +186,17 @@ resource campanhasContainer 'Microsoft.Storage/storageAccounts/blobServices/cont
   name: 'campanhas'
   properties: { publicAccess: 'None' }
 }
-resource storagePe 'Microsoft.Network/privateEndpoints@2023-11-01' = {
-  name: 'pe-${nomes.storage}'
-  location: location
-  tags: tags
-  properties: {
-    subnet: { id: subnetPe.id }
-    privateLinkServiceConnections: [
-      {
-        name: 'blob'
-        properties: {
-          privateLinkServiceId: storage.id
-          groupIds: ['blob']
-        }
-      }
-    ]
-  }
-}
-resource storagePeDns 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-11-01' = {
-  parent: storagePe
-  name: 'default'
-  properties: {
-    privateDnsZoneConfigs: [
-      {
-        name: 'blob'
-        properties: { privateDnsZoneId: peDnsZones[1].id }
-      }
-    ]
-  }
-}
 
 // ---------------------------------------------------------------------------
-// Azure Container Registry — COMPARTILHADO entre ambientes (naming sem
-// sufixo de ambiente; nome de ACR é globalmente único). O registro
-// `acrtotalcampanha01` JÁ EXISTE em rg-totalcampanha-dev desde o deploy dev
-// de 06/2026 — este template NÃO o cria; referencia o existente e concede
-// AcrPull via módulo no RG dele.
+// ACR — COMPARTILHADO (já existe em rg-totalcampanha-dev). Só referenciado.
 // ---------------------------------------------------------------------------
-@description('Resource group onde o ACR compartilhado já existe.')
-param acrResourceGroup string = 'rg-totalcampanha-dev'
-
 resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' existing = {
   name: nomes.acr
   scope: resourceGroup(acrResourceGroup)
 }
 
 // ---------------------------------------------------------------------------
-// Key Vault — soft delete 90d + purge protection + private endpoint
+// Key Vault — público (RBAC). Resolve o smoke-test em runner público.
 // ---------------------------------------------------------------------------
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: nomes.keyVault
@@ -359,41 +209,12 @@ resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
     enableSoftDelete: true
     softDeleteRetentionInDays: 90
     enablePurgeProtection: true
-    publicNetworkAccess: 'Disabled'
-  }
-}
-resource kvPe 'Microsoft.Network/privateEndpoints@2023-11-01' = {
-  name: 'pe-${nomes.keyVault}'
-  location: location
-  tags: tags
-  properties: {
-    subnet: { id: subnetPe.id }
-    privateLinkServiceConnections: [
-      {
-        name: 'vault'
-        properties: {
-          privateLinkServiceId: keyVault.id
-          groupIds: ['vault']
-        }
-      }
-    ]
-  }
-}
-resource kvPeDns 'Microsoft.Network/privateEndpoints/privateDnsZoneGroups@2023-11-01' = {
-  parent: kvPe
-  name: 'default'
-  properties: {
-    privateDnsZoneConfigs: [
-      {
-        name: 'vault'
-        properties: { privateDnsZoneId: peDnsZones[2].id }
-      }
-    ]
+    publicNetworkAccess: 'Enabled'
   }
 }
 
 // ---------------------------------------------------------------------------
-// Container Apps Environment — VNet integrado, zone-redundant
+// Container Apps Environment — Consumption, SEM VNet, SEM zona redundante.
 // ---------------------------------------------------------------------------
 resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: nomes.cae
@@ -407,24 +228,15 @@ resource cae 'Microsoft.App/managedEnvironments@2024-03-01' = {
         sharedKey: logAnalytics.listKeys().primarySharedKey
       }
     }
-    vnetConfiguration: {
-      infrastructureSubnetId: subnetCae.id
-      internal: false
-    }
-    zoneRedundant: true
+    zoneRedundant: false
   }
 }
 
 // ---------------------------------------------------------------------------
-// Container Apps — api, web, worker.
-//
-// Criados com a imagem quickstart da Microsoft. Os workflows de deploy
-// (deploy-*.yml) trocam para a imagem real via `az containerapp update`.
-// Env vars e secrets são configurados pós-infra (instrucao_deploys.md Passo 4/9).
-// min-replicas = 1 SEMPRE (lição L04 — nunca scale-to-zero em PROD).
+// Container Apps — api, web, worker. Imagem quickstart; deploy real via workflow.
+// api/web: scale-to-zero (min 0) — cold start ~20-40s aceitável no lançamento.
+// worker: min 1 (sempre processa a fila BullMQ). CPU 0.5 / 1Gi.
 // ---------------------------------------------------------------------------
-var quickstartImage = 'mcr.microsoft.com/k8se/quickstart:latest'
-
 resource appApi 'Microsoft.App/containerApps@2024-03-01' = {
   name: 'tc-api-${environment}'
   location: location
@@ -439,10 +251,7 @@ resource appApi 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: 3001
         transport: 'auto'
         customDomains: empty(baseDomain) ? [] : [
-          {
-            name: 'api.${baseDomain}'
-            bindingType: 'SniEnabled'
-          }
+          { name: 'api.${baseDomain}', bindingType: 'SniEnabled' }
         ]
       }
       registries: [
@@ -454,10 +263,7 @@ resource appApi 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'tc-api'
           image: quickstartImage
-          resources: { cpu: 1, memory: '2Gi' }
-          // Probes apontam para a app real (instrucao_azure.md seção 5). Com a
-          // imagem quickstart inicial elas falham — esperado; a 1ª revision
-          // saudável é a do deploy real via workflow.
+          resources: { cpu: json('0.5'), memory: '1Gi' }
           probes: [
             {
               type: 'Liveness'
@@ -475,13 +281,10 @@ resource appApi 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
-        maxReplicas: 8
+        minReplicas: 0
+        maxReplicas: 4
         rules: [
-          {
-            name: 'http'
-            http: { metadata: { concurrentRequests: '50' } }
-          }
+          { name: 'http', http: { metadata: { concurrentRequests: '50' } } }
         ]
       }
     }
@@ -514,7 +317,7 @@ resource appWeb 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'tc-web'
           image: quickstartImage
-          resources: { cpu: 1, memory: '2Gi' }
+          resources: { cpu: json('0.5'), memory: '1Gi' }
           probes: [
             {
               type: 'Liveness'
@@ -532,13 +335,10 @@ resource appWeb 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       scale: {
-        minReplicas: 1
-        maxReplicas: 8
+        minReplicas: 0
+        maxReplicas: 4
         rules: [
-          {
-            name: 'http'
-            http: { metadata: { concurrentRequests: '80' } }
-          }
+          { name: 'http', http: { metadata: { concurrentRequests: '80' } } }
         ]
       }
     }
@@ -554,7 +354,6 @@ resource appWorker 'Microsoft.App/containerApps@2024-03-01' = {
     managedEnvironmentId: cae.id
     configuration: {
       activeRevisionsMode: 'Single'
-      // Worker não tem ingress (não expõe HTTP).
       registries: [
         { server: '${nomes.acr}.azurecr.io', identity: 'system' }
       ]
@@ -564,29 +363,24 @@ resource appWorker 'Microsoft.App/containerApps@2024-03-01' = {
         {
           name: 'tc-worker'
           image: quickstartImage
-          resources: { cpu: 1, memory: '2Gi' }
+          resources: { cpu: json('0.5'), memory: '1Gi' }
         }
       ]
       scale: {
         minReplicas: 1
-        maxReplicas: 10
-        // KEDA Redis scaler — configurado via az containerapp update após
-        // o worker ter o secret redis-password (instrucao_azure.md seção 5).
+        maxReplicas: 4
       }
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// RBAC — identidade de cada Container App lê ACR (pull) e Key Vault (secrets)
+// RBAC — cada Container App lê ACR (pull) e Key Vault (secrets)
 // ---------------------------------------------------------------------------
-// IDs públicos de role definitions built-in do Azure (constantes documentadas
-// pela Microsoft — NÃO são segredos).
 var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
 
 // Itera sobre nomes ESTÁTICOS (length conhecido no início) e indexa os
-// principalIds de runtime no corpo — evita BCP178 (coleção de for não pode
-// depender de valores de runtime como appApi.identity.principalId).
+// principalIds de runtime no corpo — evita BCP178.
 var appNames = ['api', 'web', 'worker']
 var appPrincipals = [
   appApi.identity.principalId
@@ -594,9 +388,8 @@ var appPrincipals = [
   appWorker.identity.principalId
 ]
 
-// AcrPull no RG do ACR compartilhado (cross-RG exige module com scope lá).
 module acrPull 'modules/acr-pull.bicep' = {
-  name: 'acr-pull-${environment}'
+  name: 'acr-pull-lean-${environment}'
   scope: resourceGroup(acrResourceGroup)
   params: {
     acrName: nomes.acr
@@ -617,7 +410,7 @@ resource kvSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
 ]
 
 // ---------------------------------------------------------------------------
-// Budget — alerta 80%, freeze 100% (RULES 6.4 / instrucao_azure.md seção 7.3)
+// Budget — alerta 80% / 100% (teto enxuto)
 // ---------------------------------------------------------------------------
 resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
   name: 'budget-totalcampanha-${environment}'
@@ -647,7 +440,7 @@ resource budget 'Microsoft.Consumption/budgets@2023-11-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Alertas de métrica + Action Group (instrucao_azure.md seção 10)
+// Alertas de métrica + Action Group
 // ---------------------------------------------------------------------------
 resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
   name: 'ag-totalcampanha-${environment}'
@@ -657,16 +450,11 @@ resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
     groupShortName: 'tc-${environment}'
     enabled: true
     emailReceivers: [
-      {
-        name: 'operacao'
-        emailAddress: alertEmail
-        useCommonAlertSchema: true
-      }
+      { name: 'operacao', emailAddress: alertEmail, useCommonAlertSchema: true }
     ]
   }
 }
 
-// Erros 5xx na API (App Insights requests/failed) > 5 em 5 min.
 resource alertApi5xx 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   name: 'alert-tc-api-5xx-${environment}'
   location: 'global'
@@ -694,7 +482,6 @@ resource alertApi5xx 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   }
 }
 
-// PostgreSQL CPU > 80% por 15 min.
 resource alertPgCpu 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   name: 'alert-pg-cpu-${environment}'
   location: 'global'
@@ -722,7 +509,6 @@ resource alertPgCpu 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   }
 }
 
-// Redis memória > 90% (noeviction: estouro de memória = jobs BullMQ travando).
 resource alertRedisMem 'Microsoft.Insights/metricAlerts@2018-03-01' = {
   name: 'alert-redis-mem-${environment}'
   location: 'global'
@@ -751,7 +537,7 @@ resource alertRedisMem 'Microsoft.Insights/metricAlerts@2018-03-01' = {
 }
 
 // ---------------------------------------------------------------------------
-// Outputs — usados nos passos manuais de DNS + Key Vault (instrucao_deploys.md)
+// Outputs
 // ---------------------------------------------------------------------------
 output apiFqdn string = appApi.properties.configuration.ingress.fqdn
 output webFqdn string = appWeb.properties.configuration.ingress.fqdn

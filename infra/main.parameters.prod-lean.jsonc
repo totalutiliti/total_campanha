@@ -1,0 +1,20 @@
+{
+  // Parâmetros do deploy PROD ENXUTO (lançamento / baixo custo).
+  // Usar com infra/main.lean.bicep. postgresAdminPassword e baseDomain
+  // vão via --parameters na CLI (nunca commitar segredo).
+  //
+  //   az deployment group create -g rg-totalcampanha-prod \
+  //     --template-file infra/main.lean.bicep \
+  //     --parameters infra/main.parameters.prod-lean.jsonc \
+  //     --parameters postgresAdminPassword="$PGPASS" --parameters baseDomain=""
+  //
+  // Quando a demanda crescer: migrar para main.bicep + main.parameters.prod.jsonc (HA).
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "location": { "value": "brazilsouth" },
+    "environment": { "value": "prod" },
+    "budgetMensalBrl": { "value": 800 },
+    "alertEmail": { "value": "joao@totalutiliti.com.br" }
+  }
+}
