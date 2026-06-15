@@ -10,6 +10,35 @@
 
 ---
 
+## 2026-06-15 — Infra de lançamento ENXUTA (main.lean.bicep) + aba Manual
+
+**Categoria:** Infra / Custo / Frontend
+
+Decisão de custo pro go-live: PROD sobe num perfil **enxuto** (~R$ 300/mês), não no HA
+do `main.bicep` (~R$ 2.000-3.000/mês). Razão: modelo **BYOA + multi-tenant** → custo é
+**fixo e compartilhado** entre todos os tenants (marginal por cliente ~R$ 1-5), então o
+limitante é valor/mercado, não custo. Break-even ≈ **4 clientes** a R$ 97.
+
+- **Novo `infra/main.lean.bicep` + `main.parameters.prod-lean.jsonc`** (budget R$ 800):
+  Postgres **B1ms Burstable, sem HA**, 32GB, backup 7d local; Redis **Basic C0**; Storage
+  **LRS**; **sem VNet/Private Endpoints** (público + firewall + TLS); Container Apps
+  api/web **scale-to-zero** (cold start 20-40s aceito), worker min 1, **0.5 vCPU/1Gi**;
+  **Key Vault público (RBAC)** — de quebra resolve o blocker do smoke-test em runner
+  público. **Sem PgBouncer** (não existe no Burstable) → no lean o `DATABASE_URL` conecta
+  direto na **5432**, não em pool.
+- `main.bicep` (HA) fica intacto como referência. **Gatilhos pra migrar p/ HA:** ~15-25
+  clientes pagantes, CPU>70% sustentada, exigência de SLA ou rede privada/compliance.
+- **Bug latente corrigido no `main.bicep`:** `var apps` embutia
+  `appApi.identity.principalId` (runtime) usado em `for` → **BCP178**; o deploy HA
+  falharia no 1º provisionamento (nunca pego porque PROD nunca subiu). Agora itera nomes
+  estáticos e indexa principalIds. Ambos templates validados com `az bicep build` (exit 0).
+- **Frontend:** nova **aba Manual** (`/manual`) com passo a passo contextual de cada tela
+  (abre filtrada pela aba atual via `?secao=`); slots de captura de tela em
+  `apps/web/public/manual/`. No ar no dev (revision `r06151055`).
+- **Preços** revisados (não alterados): Starter R$ 97 / Pro R$ 297 / Enterprise R$ 997 —
+  alinhados ao mercado BR; recomendação foi adicionar tier grátis + plano anual em vez de
+  baixar a régua (custo baixo é vantagem de margem, não motivo p/ cost-plus).
+
 ## 2026-06-12 — Prontidão de produção + identidade visual (branch feat/prontidao-producao)
 
 **Categoria:** Produção / UX / Segurança
