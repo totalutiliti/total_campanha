@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  BookOpen,
   CreditCard,
   Home,
   Inbox,
@@ -24,12 +25,15 @@ import { useAuth } from '../../lib/auth/context';
 import { cn } from '../../lib/cn';
 
 import { BannerConta } from './banner-conta';
+import { secaoDaRota } from './manual/secoes';
 
 interface ItemNav {
   nome: string;
   href: string;
   icone: typeof Home;
   somenteAdmin?: boolean;
+  /** Item do Manual: o href é contextual (abre filtrado pela aba atual). */
+  manual?: boolean;
 }
 
 /**
@@ -44,6 +48,7 @@ const ITENS_NAV: ItemNav[] = [
   { nome: 'Mensagens', href: '/templates', icone: MessageSquare },
   { nome: 'Respostas', href: '/respostas', icone: Inbox },
   { nome: 'Conexões', href: '/conexoes', icone: Plug },
+  { nome: 'Manual', href: '/manual', icone: BookOpen, manual: true },
   { nome: 'Plano', href: '/plano', icone: CreditCard, somenteAdmin: true },
   { nome: 'Minha conta', href: '/minha-conta', icone: UserCog },
 ];
@@ -117,13 +122,18 @@ export function GuardiaoAuth({ children }: { children: React.ReactNode }) {
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-4">
         {itens.map((item) => {
-          const ativo =
-            item.href === '/' ? pathname === '/' : pathname.startsWith(item.href);
+          // O Manual abre filtrado pela aba atual (?secao=...).
+          const href = item.manual ? `/manual?secao=${secaoDaRota(pathname)}` : item.href;
+          const ativo = item.manual
+            ? pathname.startsWith('/manual')
+            : item.href === '/'
+              ? pathname === '/'
+              : pathname.startsWith(item.href);
           const Icone = item.icone;
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={href}
               className={cn(
                 'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
                 ativo
@@ -166,8 +176,7 @@ export function GuardiaoAuth({ children }: { children: React.ReactNode }) {
       {estado.impersonando && (
         <div className="bg-amber-400 text-amber-950 text-sm px-4 py-2 flex items-center justify-center gap-3 flex-wrap">
           <span>
-            👁 Você está vendo como <strong>{estado.impersonando.nome}</strong> — modo Super
-            Admin.
+            👁 Você está vendo como <strong>{estado.impersonando.nome}</strong> — modo Super Admin.
           </span>
           <button
             type="button"
