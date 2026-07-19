@@ -18,7 +18,7 @@ Total Campanha é um SaaS multi-tenant com isolamento por **PostgreSQL Row-Level
 │                                                                  │
 │  ┌────────────────┐  ┌────────────────┐  ┌──────────────────┐  │
 │  │ tc-web-prod    │  │ tc-api-prod    │  │ tc-worker-prod   │  │
-│  │ Next.js 14     │  │ NestJS         │  │ NestJS+BullMQ    │  │
+│  │ Next.js 15     │  │ NestJS         │  │ NestJS+BullMQ    │  │
 │  │ min=1 max=3    │  │ min=1 max=8    │  │ min=1 max=10     │  │
 │  └────────┬───────┘  └───┬─────┬──────┘  └────────┬─────────┘  │
 │           │              │     │                   │            │
@@ -35,7 +35,7 @@ Total Campanha é um SaaS multi-tenant com isolamento por **PostgreSQL Row-Level
                      │ Blob Storage │       │ Key Vault     │
                      │ uploads,     │       │ AUTH_PEPPER,  │
                      │ templates    │       │ TOKEN_KMS,    │
-                     │ MJML, fotos  │       │ webhook secrt │
+                     │ MJML, fotos  │       │ TOKEN_KMS     │
                      └──────────────┘       └───────────────┘
 
    Externos (BYOA):
@@ -79,12 +79,14 @@ Tabelas principais (todas com `tenant_id` exceto as marcadas com 🌐):
 - `segmentos(id, tenant_id, nome, filtros_jsonb)`
 - `templates(id, tenant_id, canal, nome, meta_template_name, mjml, variaveis[], ...)`
 - `campanhas(id, tenant_id, segmento_id, template_id, canal, status, agendado_para, janela_envio_jsonb, ...)`
-- `mensagens(id, tenant_id, campanha_id, contato_id, canal, status, status_history_jsonb, provider_message_id, custo_estimado_brl, enviada_em, ...)`
+- `mensagens(id, tenant_id, campanha_id, contato_id, canal, status, processamento_token, processamento_iniciado_em, tentativas_envio, provider_message_id, ...)`
 - `inbox_conversas(id, tenant_id, contato_id, ultimo_msg_at, janela_24h_expira_em, status)`
 - `inbox_mensagens(id, tenant_id, conversa_id, direcao, conteudo, ...)`
-- `conexoes_whatsapp(id, tenant_id, waba_id, phone_number_id, token_encrypted, webhook_secret, tier_meta, status)`
+- `conexoes_whatsapp(id, tenant_id, waba_id, phone_number_id, token_encrypted, app_secret_encrypted, webhook_secret, tier_meta, status)`
 - `conexoes_email(id, tenant_id, dominio, remetente, dkim_status, spf_status, status)`
 - `opt_in_log(id, tenant_id, contato_id, canal, ip, user_agent, origem, versao_termo, created_at)` — imutável
+- `consentimentos_pendentes(id, tenant_id, contato_id, canal, token_hash, expira_em, confirmado_em, ...)`
+- `webhook_eventos(id, tenant_id, provedor, evento_hash, recebido_em, processado_em)`
 - `audit_log(id, tenant_id, user_id, acao, recurso, dados_jsonb, created_at)` — imutável
 
 RLS:
@@ -94,9 +96,14 @@ CREATE POLICY contatos_tenant_isolation ON contatos
   USING (tenant_id = current_setting('app.current_tenant')::uuid);
 ```
 
+API e worker usam `app_user` nas operações de domínio. Jobs recorrentes usam um
+cliente de control-plane separado com `migration_user` apenas para descobrir
+tenants/IDs; toda mutação retorna a `runInTenant`. O boot do worker rejeita a
+role privilegiada em `DATABASE_URL`.
+
 E o middleware NestJS, em toda transação:
 ```typescript
-await prisma.$executeRawUnsafe(`SET LOCAL app.current_tenant = '${tenantId}'`);
+await prisma.$executeRaw`SELECT set_config('app.current_tenant', ${tenantId}, true)`;
 ```
 
 ## 4. Módulos NestJS
@@ -186,10 +193,10 @@ Managed Certificates (Let's Encrypt) via Azure Container Apps. Setup em duas fas
 
 - Tenant cria conta Meta Business Manager + WABA + Phone Number (responsabilidade dele).
 - Tenant gera **System User Token permanente** com escopos `whatsapp_business_messaging`, `whatsapp_business_management`.
-- Tenant cola na plataforma: `WABA ID`, `Phone Number ID`, `Token`.
-- Plataforma criptografa o token com `pgcrypto` (chave em Key Vault) e armazena.
+- Tenant cola na plataforma: `WABA ID`, `Phone Number ID`, `Token` e `App Secret`.
+- Plataforma criptografa token e App Secret com `pgcrypto` (chave em Key Vault) e armazena.
 - Plataforma testa a conexão chamando `GET /v18.0/{phone_number_id}` — se 200, salva; se 401/403, mostra erro.
-- Webhook configurado na conta Meta do tenant aponta para `https://api.totalcampanha.com.br/webhooks/meta/{tenant_slug}` com o `webhook_secret` que a plataforma gera.
+- Webhook aponta para `https://api.totalcampanha.com.br/api/v1/webhooks/meta/{tenant_slug}/{webhook_secret}`. POST exige `X-Hub-Signature-256` válido sobre o corpo bruto e ledger único contra replay.
 
 **Versão API Meta:** fixar em `v22.0` (atual em maio/2026 — verificar antes de deploy).
 

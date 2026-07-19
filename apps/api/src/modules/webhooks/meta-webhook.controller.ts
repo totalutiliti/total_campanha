@@ -3,21 +3,28 @@ import * as crypto from 'node:crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
+  Body,
   Controller,
   ForbiddenException,
   Get,
+  Headers,
   Logger,
   Param,
   Post,
   Query,
-  Body,
+  RawBodyRequest,
+  Req,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { Queue } from 'bullmq';
+import type { Request } from 'express';
 
+import { CryptoService } from '../../common/crypto/crypto.service.js';
 import { PrismaService } from '../../common/prisma/prisma.service.js';
 import { Public } from '../auth/public.decorator.js';
+
+import { assinaturaHmacValida, igualTimingSafe } from './meta-webhook-signature.js';
 
 /**
  * Webhook da Meta Cloud API por tenant (SPECS seção 2 — Webhooks).
@@ -25,13 +32,9 @@ import { Public } from '../auth/public.decorator.js';
  * - GET  /webhooks/meta/:tenantSlug/:secret — handshake de verificação da Meta.
  * - POST /webhooks/meta/:tenantSlug/:secret — eventos (status + mensagens in).
  *
- * Autenticação: o `secret` no path é o `webhookSecret` por tenant (random 32
- * bytes, gerado ao conectar). Sem App Secret por tenant não há como validar
- * X-Hub-Signature-256 — o segredo na URL é a mitigação: o slug é público
- * (aparece na página de opt-in), o secret não. POST com secret errado responde
- * 200 sem enfileirar (não dá oráculo a atacante; a Meta real nunca erra a URL
- * que o próprio tenant configurou). Handshake errado falha alto (403) para o
- * tenant perceber configuração errada na hora.
+ * O secret no path serve para roteamento e handshake. Todo POST é autenticado
+ * criptograficamente por X-Hub-Signature-256, usando o App Secret cifrado do
+ * app Meta do tenant. Payloads válidos são deduplicados antes da fila.
  *
  * `@SkipThrottle`: callbacks de status chegam em rajada (1 por mensagem
  * enviada) — o throttle global de 60/min derrubaria campanhas reais e a Meta
@@ -48,6 +51,7 @@ export class MetaWebhookController {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly cryptoService: CryptoService,
     @InjectQueue('webhook-meta') private readonly fila: Queue,
   ) {}
 
@@ -79,6 +83,8 @@ export class MetaWebhookController {
     @Param('tenantSlug') slug: string,
     @Param('secret') secret: string,
     @Body() payload: unknown,
+    @Headers('x-hub-signature-256') assinatura: string | undefined,
+    @Req() req: RawBodyRequest<Request>,
   ): Promise<{ ok: true }> {
     const conexao = await this.conexaoDoSlug(slug);
     if (!conexao || !igualTimingSafe(secret, conexao.webhookSecret)) {
@@ -87,10 +93,40 @@ export class MetaWebhookController {
       this.logger.warn({ msg: 'webhook_meta_rejeitado', slug });
       return { ok: true };
     }
+    if (!conexao.appSecretEncrypted || conexao.appSecretEncrypted.length === 0 || !req.rawBody) {
+      this.logger.warn({ msg: 'webhook_meta_sem_material_hmac', slug });
+      return { ok: true };
+    }
+    const appSecret = await this.cryptoService.decryptToken(conexao.appSecretEncrypted);
+    if (!assinaturaHmacValida(req.rawBody, assinatura, appSecret)) {
+      this.logger.warn({ msg: 'webhook_meta_hmac_invalido', slug });
+      return { ok: true };
+    }
     if (typeof payload !== 'object' || payload === null) {
       throw new BadRequestException('Payload inválido.');
     }
-    await this.fila.add('processar', { tenantId: conexao.tenantId, payload });
+
+    const eventoHash = crypto.createHash('sha256').update(req.rawBody).digest('hex');
+    const evento = await this.prisma.runInTenant(conexao.tenantId, (tx) =>
+      tx.webhookEvento.upsert({
+        where: {
+          tenantId_provedor_eventoHash: {
+            tenantId: conexao.tenantId,
+            provedor: 'META',
+            eventoHash,
+          },
+        },
+        create: { tenantId: conexao.tenantId, provedor: 'META', eventoHash },
+        update: {},
+      }),
+    );
+    if (evento.processadoEm) return { ok: true };
+
+    await this.fila.add(
+      'processar',
+      { tenantId: conexao.tenantId, eventoId: evento.id, payload },
+      { jobId: `meta-${eventoHash}`, attempts: 3, backoff: { type: 'exponential', delay: 1000 } },
+    );
     return { ok: true };
   }
 
@@ -101,12 +137,4 @@ export class MetaWebhookController {
       tx.conexaoWhatsapp.findUnique({ where: { tenantId: tenant.id } }),
     );
   }
-}
-
-function igualTimingSafe(a: string | undefined, b: string | undefined): boolean {
-  if (!a || !b) return false;
-  const ba = Buffer.from(a, 'utf8');
-  const bb = Buffer.from(b, 'utf8');
-  if (ba.length !== bb.length) return false;
-  return crypto.timingSafeEqual(ba, bb);
 }

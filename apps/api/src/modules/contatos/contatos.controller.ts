@@ -94,8 +94,8 @@ export class ContatosController {
     const conteudo = arquivo.buffer.toString('utf8');
     return this.importar.importar(tenantId, user.sub, conteudo, {
       modo: dto.modo,
-      optInEmail: dto.optInEmail,
-      optInWhatsapp: dto.optInWhatsapp,
+      optInEmail: false,
+      optInWhatsapp: false,
     });
   }
 

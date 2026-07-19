@@ -16,6 +16,7 @@ import { ListarContatosDto } from './dto/listar-contatos.dto.js';
 export class ContatosService {
   private readonly logger = new Logger(ContatosService.name);
   private readonly pepperAnonimizacao: string;
+  private readonly versaoTermo: string;
 
   constructor(
     config: ConfigService,
@@ -25,6 +26,7 @@ export class ContatosService {
     // O hash de anonimização (LGPD) usa o AUTH_PEPPER para não precisar
     // gerenciar mais uma chave. É só estabilizar o hash entre execuções.
     this.pepperAnonimizacao = env(config, 'AUTH_PEPPER');
+    this.versaoTermo = env(config, 'CURRENT_OPT_IN_TERM_VERSION');
   }
 
   async criar(tenantId: string, userId: string, dto: CriarContatoDto) {
@@ -131,7 +133,7 @@ export class ContatosService {
         if (collide) throw new ConflictException('Já existe contato com este telefone.');
       }
 
-      return tx.contato.update({
+      const contato = await tx.contato.update({
         where: { id },
         data: {
           ...(dto.nome !== undefined ? { nome: dto.nome } : {}),
@@ -143,6 +145,37 @@ export class ContatosService {
           ...(dto.optInWhatsapp !== undefined ? { optInWhatsapp: dto.optInWhatsapp } : {}),
         },
       });
+      if (dto.optInEmail === false && existente.optInEmail) {
+        await tx.optInLog.create({
+          data: {
+            tenantId,
+            contatoId: id,
+            email: existente.email,
+            canal: 'EMAIL',
+            acao: 'OPT_OUT',
+            ip: '0.0.0.0',
+            userAgent: `painel-admin:${userId}`,
+            origem: 'painel-admin',
+            versaoTermo: this.versaoTermo,
+          },
+        });
+      }
+      if (dto.optInWhatsapp === false && existente.optInWhatsapp) {
+        await tx.optInLog.create({
+          data: {
+            tenantId,
+            contatoId: id,
+            telefoneE164: existente.telefoneE164,
+            canal: 'WHATSAPP',
+            acao: 'OPT_OUT',
+            ip: '0.0.0.0',
+            userAgent: `painel-admin:${userId}`,
+            origem: 'painel-admin',
+            versaoTermo: this.versaoTermo,
+          },
+        });
+      }
+      return contato;
     });
 
     if (!atualizado) throw new NotFoundException('Contato não encontrado.');
@@ -209,20 +242,40 @@ export class ContatosService {
       });
     }
 
-    // opt_in_log é imutável (RULES 5.4) — só inserts.
-    await tx.optInLog.create({
-      data: {
+    const conversas = await tx.inboxConversa.findMany({
+      where: { contatoId: contato.id },
+      select: { id: true },
+    });
+    if (conversas.length > 0) {
+      await tx.inboxMensagem.deleteMany({
+        where: { conversaId: { in: conversas.map((c) => c.id) } },
+      });
+      await tx.inboxConversa.deleteMany({ where: { contatoId: contato.id } });
+    }
+
+    await tx.consentimentoPendente.deleteMany({ where: { contatoId: contato.id } });
+    await tx.$executeRaw`SELECT tc_lgpd_anonimizar_opt_in(${tenantId}::uuid, ${contato.id}::uuid)`;
+
+    // Registra a revogação sem reintroduzir PII no log já anonimizado.
+    const canaisRevogados: Array<'EMAIL' | 'WHATSAPP'> = [
+      ...(contato.email ? (['EMAIL'] as const) : []),
+      ...(contato.telefoneE164 ? (['WHATSAPP'] as const) : []),
+    ];
+    const canaisEfetivos: Array<'EMAIL' | 'WHATSAPP'> =
+      canaisRevogados.length > 0 ? canaisRevogados : ['EMAIL'];
+    await tx.optInLog.createMany({
+      data: canaisEfetivos.map((canal) => ({
         tenantId,
         contatoId: null,
-        email: contato.email,
-        telefoneE164: contato.telefoneE164,
-        canal: contato.telefoneE164 ? 'WHATSAPP' : 'EMAIL',
+        email: null,
+        telefoneE164: null,
+        canal,
         acao: 'OPT_OUT',
         ip: '0.0.0.0',
         userAgent: 'lgpd-direito-esquecimento',
         origem: 'lgpd-direito-esquecimento',
         versaoTermo: 'lgpd',
-      },
+      })),
     });
 
     await tx.contato.delete({ where: { id: contato.id } });

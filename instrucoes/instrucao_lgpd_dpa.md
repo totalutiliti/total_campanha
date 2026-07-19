@@ -136,21 +136,25 @@ Campos críticos:
 - **`origem`**: 'landing-tenant', 'qr-balcao-loja-x', 'webhook-import-erp', 'whatsapp-stop'
 - **`versao_termo`**: snapshot do texto aceito (não só version label — guardar URL canônica)
 
-**Imutabilidade:**
+### 4.1. Confirmação por canal
+
+- **Email:** o POST público cria/atualiza o contato com `opt_in_email=false` e
+  grava `consentimentos_pendentes` com hash do token, expiração, IP, user-agent,
+  origem e versão. Apenas `GET /p/opt-in/confirmar/:token`, uma única vez e antes
+  da expiração, ativa o canal e cria `opt_in_logs`.
+- **WhatsApp:** a ação afirmativa na landing, vinculada ao telefone informado,
+  registra imediatamente o evento do canal.
+- Criação/edição administrativa e importação não podem conceder opt-in; podem
+  apenas revogar um consentimento já ativo. A revogação também gera log.
+
+**Imutabilidade com exceção de anonimização:**
 
 ```sql
--- Trigger que bloqueia UPDATE/DELETE em opt_in_log
-CREATE OR REPLACE FUNCTION bloquear_modificacao_opt_in_log()
-RETURNS trigger AS $$
-BEGIN
-  RAISE EXCEPTION 'opt_in_log é imutável. Inserts apenas.';
-END;
-$$ LANGUAGE plpgsql;
+REVOKE UPDATE, DELETE ON opt_in_logs FROM app_user;
 
-CREATE TRIGGER trg_opt_in_log_imutavel
-  BEFORE UPDATE OR DELETE ON opt_in_log
-  FOR EACH ROW
-  EXECUTE FUNCTION bloquear_modificacao_opt_in_log();
+-- Única exceção: função SECURITY DEFINER que exige
+-- p_tenant_id = current_setting('app.current_tenant')::uuid e apenas zera PII.
+GRANT EXECUTE ON FUNCTION tc_lgpd_anonimizar_opt_in(UUID, UUID) TO app_user;
 ```
 
 Backup: opt_in_log é parte do backup PostgreSQL diário (35 dias geo-redundante).
@@ -171,8 +175,9 @@ Backup: opt_in_log é parte do backup PostgreSQL diário (35 dias geo-redundante
 3. **Execução em até 24h** (lei diz "prazo razoável"; comprometemos com <24h):
    - Hard delete em `contatos` (linha some)
    - Em `mensagens`, substitui `contato_id` por NULL, adiciona `destinatario_hash = sha256(email_or_phone)` para manter estatísticas agregadas
-   - Em `inbox_conversas` e `inbox_mensagens`, anonimiza conteúdo (substitui por `[REMOVIDO POR LGPD]`)
-   - **NÃO** remove de `opt_in_log` (registro imutável e necessário para evidência de cumprimento)
+   - Exclui `inbox_mensagens`, `inbox_conversas` e consentimentos pendentes do contato
+   - Mantém `opt_in_logs` como evidência, mas zera `contato_id`, email e telefone pela função restrita de anonimização
+   - Cria um OPT_OUT final sem PII para cada canal presente
    - Audit log com a ação
 
 4. **Confirmação ao titular** por email/SMS: "Dados removidos em {data}. Eventuais registros de log mantidos por obrigação legal."
@@ -180,53 +185,15 @@ Backup: opt_in_log é parte do backup PostgreSQL diário (35 dias geo-redundante
 ### 5.2. Implementação
 
 ```typescript
-// modules/contatos/lgpd.service.ts
-async excluirPorDireito(tenantId: string, contatoId: string, motivo: string) {
-  return this.prisma.runInTenant(tenantId, async (tx) => {
-    const contato = await tx.contato.findUnique({ where: { id: contatoId } });
-    if (!contato) throw new NotFoundException();
+await prisma.runInTenant(tenantId, async (tx) => {
+  // 1. Mensagens: contato_id -> NULL + hash por canal com pepper.
+  // 2. Inbox e consentimentos pendentes: DELETE.
+  // 3. opt_in_logs: tc_lgpd_anonimizar_opt_in(tenantId, contatoId).
+  // 4. OPT_OUT sem PII para cada canal presente.
+  // 5. Contato: hard DELETE.
+});
 
-    const hash = sha256((contato.email || contato.telefoneE164 || contatoId) + this.pepper);
-
-    // 1. Anonimiza mensagens (mantém estatística agregada)
-    await tx.mensagem.updateMany({
-      where: { contatoId },
-      data: { contatoId: null, destinatarioHash: hash },
-    });
-
-    // 2. Anonimiza inbox
-    await tx.inboxMensagem.updateMany({
-      where: { conversa: { contatoId } },
-      data: { conteudo: '[REMOVIDO POR LGPD]' },
-    });
-    await tx.inboxConversa.updateMany({
-      where: { contatoId },
-      data: { contatoId: null },
-    });
-
-    // 3. Registra opt-out final
-    await tx.optInLog.create({
-      data: {
-        tenantId,
-        contatoId: null,  // já vai deletar
-        email: null,       // não guardamos
-        telefoneE164: null,
-        canal: 'EMAIL',    // pode ser ambos
-        acao: 'OPT_OUT',
-        ip: 'sistema',
-        userAgent: 'lgpd-direito-exclusao',
-        origem: motivo,
-        versaoTermo: this.currentTermVersion,
-      }
-    });
-
-    // 4. Hard delete do contato
-    await tx.contato.delete({ where: { id: contatoId } });
-
-    // 5. Audit
-    await this.audit.log(tenantId, null, 'lgpd.exclusao', contatoId, { motivo });
-  });
-}
+// Audit sem PII é gravado após a transação.
 ```
 
 ## 6. Retenção de dados

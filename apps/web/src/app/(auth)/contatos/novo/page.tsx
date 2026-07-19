@@ -24,16 +24,7 @@ export default function NovoContatoPage() {
       if (p.email) body.email = p.email;
       if (p.telefoneE164) body.telefoneE164 = p.telefoneE164;
 
-      const criado = await api<{ id: string }>({ method: 'POST', path: '/contatos', body });
-
-      // opt-ins não fazem parte do cadastro inicial — aplica via PATCH se marcados.
-      if (p.optInEmail || p.optInWhatsapp) {
-        await api({
-          method: 'PATCH',
-          path: `/contatos/${criado.id}`,
-          body: { optInEmail: p.optInEmail, optInWhatsapp: p.optInWhatsapp },
-        });
-      }
+      await api<{ id: string }>({ method: 'POST', path: '/contatos', body });
       router.push('/contatos');
     } catch (e) {
       setErro(mensagemErro(e));
@@ -52,7 +43,8 @@ export default function NovoContatoPage() {
       </Link>
       <h1 className="mt-2 text-3xl font-bold">Adicionar contato</h1>
       <p className="mb-6 mt-1 text-sm text-muted-foreground">
-        Cadastre um cliente com e-mail ou telefone para ele poder receber campanhas.
+        Cadastre os dados do cliente. O envio de campanhas só é liberado após consentimento
+        comprovado na página pública de opt-in.
       </p>
       <ContatoForm
         salvando={salvando}

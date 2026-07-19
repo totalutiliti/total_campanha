@@ -39,6 +39,8 @@ interface Fixtures {
   mensagem: { a: string; b: string };
   conexaoWhatsapp: { a: string; b: string };
   conexaoEmail: { a: string; b: string };
+  consentimentoPendente: { a: string; b: string };
+  webhookEvento: { a: string; b: string };
 }
 
 const fixtures: Fixtures = {
@@ -49,6 +51,8 @@ const fixtures: Fixtures = {
   mensagem: { a: '', b: '' },
   conexaoWhatsapp: { a: '', b: '' },
   conexaoEmail: { a: '', b: '' },
+  consentimentoPendente: { a: '', b: '' },
+  webhookEvento: { a: '', b: '' },
 };
 
 beforeAll(async () => {
@@ -129,6 +133,27 @@ beforeAll(async () => {
       },
     });
     fixtures.conexaoEmail[t === ctx.tenantA.id ? 'a' : 'b'] = conexaoE.id;
+
+    const consentimento = await ctx.adminPrisma.consentimentoPendente.create({
+      data: {
+        tenantId: t,
+        contatoId: contato.id,
+        canal: 'EMAIL',
+        tokenHash: `token-${t}`,
+        email: contato.email,
+        ip: '127.0.0.1',
+        userAgent: 'test',
+        origem: 'test',
+        versaoTermo: 'test',
+        expiraEm: new Date(Date.now() + 3_600_000),
+      },
+    });
+    fixtures.consentimentoPendente[t === ctx.tenantA.id ? 'a' : 'b'] = consentimento.id;
+
+    const webhook = await ctx.adminPrisma.webhookEvento.create({
+      data: { tenantId: t, provedor: 'META', eventoHash: `evento-${t}` },
+    });
+    fixtures.webhookEvento[t === ctx.tenantA.id ? 'a' : 'b'] = webhook.id;
   }
 });
 
@@ -255,6 +280,22 @@ describe('tenant isolation', () => {
     idA: () => fixtures.conexaoEmail.a,
     idB: () => fixtures.conexaoEmail.b,
     dadosUpdate: { dkimStatus: 'hack' },
+  });
+
+  rodarCasos({
+    nome: 'ConsentimentoPendente',
+    modelo: 'consentimentoPendente',
+    idA: () => fixtures.consentimentoPendente.a,
+    idB: () => fixtures.consentimentoPendente.b,
+    dadosUpdate: { invalidadoEm: new Date() },
+  });
+
+  rodarCasos({
+    nome: 'WebhookEvento',
+    modelo: 'webhookEvento',
+    idA: () => fixtures.webhookEvento.a,
+    idB: () => fixtures.webhookEvento.b,
+    dadosUpdate: { processadoEm: new Date() },
   });
 });
 

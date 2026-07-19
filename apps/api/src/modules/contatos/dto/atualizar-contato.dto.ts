@@ -11,8 +11,9 @@ export const AtualizarContatoSchema = z.object({
     .nullable(),
   tags: z.array(z.string().min(1).max(60)).optional(),
   extras: z.record(z.unknown()).optional(),
-  optInEmail: z.boolean().optional(),
-  optInWhatsapp: z.boolean().optional(),
+  // O painel pode revogar, mas não fabricar prova de consentimento.
+  optInEmail: z.literal(false).optional(),
+  optInWhatsapp: z.literal(false).optional(),
 });
 
 export class AtualizarContatoDto extends createZodDto(AtualizarContatoSchema) {}

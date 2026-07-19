@@ -1,6 +1,7 @@
 'use client';
 
 import { Image as ImageIcon, Lightbulb } from 'lucide-react';
+import Image from 'next/image';
 import { useState, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
@@ -40,11 +41,14 @@ export function Figura({ src, legenda, alt }: { src?: string; legenda: string; a
   return (
     <figure className="my-4 overflow-hidden rounded-lg border bg-muted/30">
       {mostrarImagem ? (
-        <img
-          src={src}
+        <Image
+          src={src!}
           alt={alt ?? legenda}
+          width={1600}
+          height={900}
+          unoptimized
           onError={() => setErro(true)}
-          className="block w-full"
+          className="block h-auto w-full"
         />
       ) : (
         <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center">

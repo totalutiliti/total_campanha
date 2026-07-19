@@ -74,6 +74,7 @@ export class ConexaoWhatsappService {
     const info = await this.validarTokenContraMeta(dto.token, dto.phoneNumberId);
 
     const tokenEncrypted = await this.crypto.encryptToken(dto.token);
+    const appSecretEncrypted = await this.crypto.encryptToken(dto.appSecret);
     const webhookSecret = crypto.randomBytes(32).toString('hex');
 
     const tenant = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
@@ -86,6 +87,7 @@ export class ConexaoWhatsappService {
           wabaId: dto.wabaId,
           phoneNumberId: dto.phoneNumberId,
           tokenEncrypted,
+          appSecretEncrypted,
           webhookSecret,
           status: 'ATIVA',
           qualityRating: info.qualityRating ?? null,
@@ -145,12 +147,16 @@ export class ConexaoWhatsappService {
     // Valida o novo token contra Meta antes de persistir (RULES 4.3).
     const info = await this.validarTokenContraMeta(dto.token, conexao.phoneNumberId);
     const tokenEncrypted = await this.crypto.encryptToken(dto.token);
+    const appSecretEncrypted = dto.appSecret
+      ? await this.crypto.encryptToken(dto.appSecret)
+      : undefined;
 
     const atualizada = await this.prisma.runInTenant(tenantId, (tx) =>
       tx.conexaoWhatsapp.update({
         where: { tenantId },
         data: {
           tokenEncrypted,
+          ...(appSecretEncrypted ? { appSecretEncrypted } : {}),
           status: 'ATIVA',
           qualityRating: info.qualityRating ?? null,
           ultimoTeste: new Date(),
@@ -180,7 +186,11 @@ export class ConexaoWhatsappService {
     await this.prisma.runInTenant(tenantId, (tx) =>
       tx.conexaoWhatsapp.update({
         where: { tenantId },
-        data: { status: 'SUSPENSA', tokenEncrypted: Buffer.alloc(0) },
+        data: {
+          status: 'SUSPENSA',
+          tokenEncrypted: Buffer.alloc(0),
+          appSecretEncrypted: Buffer.alloc(0),
+        },
       }),
     );
 

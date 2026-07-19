@@ -9,6 +9,7 @@ export const WorkerEnvSchema = z.object({
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error']).default('info'),
   TZ: z.string().default('America/Sao_Paulo'),
   DATABASE_URL: z.string().min(1),
+  DATABASE_MIGRATION_URL: z.string().min(1).optional(),
   REDIS_URL: z.string().min(1).default('redis://localhost:6379'),
   BULLMQ_PREFIX: z.string().default('tc'),
   AUTH_PEPPER: z.string().min(32),
@@ -60,10 +61,37 @@ export function loadEnv(raw: NodeJS.ProcessEnv): WorkerEnv {
   // Validação cruzada: provider SES exige credenciais AWS explícitas — sem isso
   // o envio falharia silenciosamente em runtime.
   const env = parsed.data;
+  const runtimeUser = usuarioDaUrl(env.DATABASE_URL);
+  if (runtimeUser === 'migration_user') {
+    throw new Error(
+      '[worker/env] DATABASE_URL não pode usar migration_user; o runtime deve respeitar RLS.',
+    );
+  }
+  if (env.NODE_ENV === 'production') {
+    if (runtimeUser !== 'app_user') {
+      throw new Error('[worker/env] Em produção, DATABASE_URL deve usar o role app_user.');
+    }
+    if (!env.DATABASE_MIGRATION_URL) {
+      throw new Error(
+        '[worker/env] Em produção, DATABASE_MIGRATION_URL é obrigatória para o plano de controle.',
+      );
+    }
+    if (env.DATABASE_MIGRATION_URL === env.DATABASE_URL) {
+      throw new Error('[worker/env] As URLs de runtime e plano de controle devem ser diferentes.');
+    }
+  }
   if (env.MAIL_PROVIDER === 'ses' && (!env.AWS_ACCESS_KEY_ID || !env.AWS_SECRET_ACCESS_KEY)) {
     throw new Error(
       '[worker/env] MAIL_PROVIDER=ses exige AWS_ACCESS_KEY_ID e AWS_SECRET_ACCESS_KEY.',
     );
   }
   return env;
+}
+
+function usuarioDaUrl(value: string): string {
+  try {
+    return decodeURIComponent(new URL(value).username);
+  } catch {
+    throw new Error('[worker/env] DATABASE_URL inválida.');
+  }
 }

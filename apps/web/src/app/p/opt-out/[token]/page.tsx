@@ -4,7 +4,7 @@ import { apiGet } from '../../../../lib/api';
 import { mensagemErro } from '../../../../lib/erro';
 
 interface PageProps {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }
 
 interface OptOutResposta {
@@ -19,7 +19,8 @@ export default async function OptOutPage({ params }: PageProps) {
   let result: OptOutResposta | null = null;
   let erro: string | null = null;
   try {
-    result = await apiGet<OptOutResposta>(`/p/opt-out/${encodeURIComponent(params.token)}`);
+    const { token } = await params;
+    result = await apiGet<OptOutResposta>(`/p/opt-out/${encodeURIComponent(token)}`);
   } catch (e) {
     erro = mensagemErro(e, 'Link inválido ou expirado.');
   }

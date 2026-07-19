@@ -7,6 +7,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Prisma } from '@total-campanha/db';
 import { Role } from '@total-campanha/shared';
 
 import { MailService } from '../../common/mail/mail.service.js';
@@ -68,46 +69,59 @@ export class AuthService {
       this.prisma.tenant.findUnique({ where: { slug: dto.slug } }),
       this.prisma.tenant.findUnique({ where: { cnpj: dto.cnpj } }),
     ]);
-    if (emailExistente) throw new ConflictException('Email já cadastrado.');
-    if (slugExistente) throw new ConflictException('Slug já em uso.');
-    if (cnpjExistente) throw new ConflictException('CNPJ já cadastrado.');
+    if (emailExistente || slugExistente || cnpjExistente) {
+      throw new ConflictException('Não foi possível criar a conta com os dados informados.');
+    }
 
     const passwordHash = await this.password.hash(dto.senha);
 
-    const tenant = await this.prisma.tenant.create({
-      data: {
-        slug: dto.slug,
-        cnpj: dto.cnpj,
-        razaoSocial: dto.razaoSocial,
-        status: 'TRIAL',
-        trialAteEm: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-        userTenants: {
-          create: {
-            role: Role.ADMIN,
-            user: {
-              create: {
-                email: dto.email,
-                emailHash,
-                passwordHash,
+    const tenant = await (async () => {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          const criado = await tx.tenant.create({
+            data: {
+              slug: dto.slug,
+              cnpj: dto.cnpj,
+              razaoSocial: dto.razaoSocial,
+              status: 'TRIAL',
+              trialAteEm: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
+              userTenants: {
+                create: {
+                  role: Role.ADMIN,
+                  user: {
+                    create: {
+                      email: dto.email,
+                      emailHash,
+                      passwordHash,
+                    },
+                  },
+                },
               },
             },
-          },
-        },
-      },
-      include: { userTenants: { include: { user: true } } },
-    });
+            include: { userTenants: { include: { user: true } } },
+          });
+          const primeiroVinculo = criado.userTenants[0];
+          await tx.$executeRaw`SELECT set_config('app.current_tenant', ${criado.id}, true)`;
+          await tx.auditLog.create({
+            data: {
+              tenantId: criado.id,
+              userId: primeiroVinculo.user.id,
+              acao: 'auth.signup',
+              recurso: criado.id,
+              dados: { slug: dto.slug, cnpj: dto.cnpj, aceiteDpaVersao: dto.aceiteDpaVersao },
+            },
+          });
+          return criado;
+        });
+      } catch (err) {
+        if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+          throw new ConflictException('Não foi possível criar a conta com os dados informados.');
+        }
+        throw err;
+      }
+    })();
 
     const userTenant = tenant.userTenants[0];
-
-    await this.prisma.auditLog.create({
-      data: {
-        tenantId: tenant.id,
-        userId: userTenant.user.id,
-        acao: 'auth.signup',
-        recurso: tenant.id,
-        dados: { slug: dto.slug, cnpj: dto.cnpj, aceiteDpaVersao: dto.aceiteDpaVersao },
-      },
-    });
 
     return this.emitirSessao(userTenant.user.id, tenant.id, userTenant.role);
   }

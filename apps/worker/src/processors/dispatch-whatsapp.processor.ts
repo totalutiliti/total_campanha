@@ -1,3 +1,5 @@
+import * as crypto from 'node:crypto';
+
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Prisma } from '@total-campanha/db';
@@ -6,7 +8,7 @@ import type { Job } from 'bullmq';
 import { CryptoService } from '../common/crypto.service.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { resolverVariaveisWhatsapp } from '../common/render.js';
-import { CUSTO_REFERENCIA, UsageService } from '../common/usage.service.js';
+import { CUSTO_REFERENCIA } from '../common/usage.service.js';
 import { MetaApiError, MetaWhatsappClient } from '../integrations/meta-whatsapp.client.js';
 
 interface DispatchJob {
@@ -36,7 +38,6 @@ export class DispatchWhatsappProcessor extends WorkerHost {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly metaClient: MetaWhatsappClient,
-    private readonly usage: UsageService,
   ) {
     super();
   }
@@ -69,18 +70,43 @@ export class DispatchWhatsappProcessor extends WorkerHost {
       return;
     }
 
+    const claimToken = crypto.randomUUID();
     const ctx = await this.prisma.runInTenant(tenantId, async (tx) => {
-      const mensagem = await tx.mensagem.findUnique({ where: { id: mensagemId } });
-      // Idempotência (at-least-once do BullMQ + reconciliação): só processa
-      // mensagem que ainda está aguardando envio.
-      if (!mensagem || (mensagem.status !== 'PENDENTE' && mensagem.status !== 'ENFILEIRADA')) {
+      const claimed = await tx.mensagem.updateMany({
+        where: {
+          id: mensagemId,
+          campanhaId,
+          status: { in: ['PENDENTE', 'ENFILEIRADA'] },
+        },
+        data: {
+          status: 'PROCESSANDO',
+          processamentoToken: claimToken,
+          processamentoIniciadoEm: new Date(),
+          tentativasEnvio: { increment: 1 },
+          falhaMotivo: null,
+          statusHistory: {
+            push: { status: 'PROCESSANDO', at: new Date().toISOString() },
+          },
+        },
+      });
+      if (claimed.count === 0) {
         return null;
       }
+
+      const mensagem = await tx.mensagem.findUnique({ where: { id: mensagemId } });
+      if (!mensagem) return null;
 
       const campanha = await tx.campanha.findUnique({ where: { id: campanhaId } });
       if (!campanha) return null;
       if (campanha.status === 'PAUSADA' || campanha.status === 'CANCELADA') {
-        await tx.mensagem.update({ where: { id: mensagemId }, data: { status: 'CANCELADA' } });
+        await tx.mensagem.update({
+          where: { id: mensagemId },
+          data: {
+            status: 'CANCELADA',
+            processamentoToken: null,
+            processamentoIniciadoEm: null,
+          },
+        });
         return null;
       }
       if (campanha.status === 'AGENDADA') {
@@ -102,20 +128,48 @@ export class DispatchWhatsappProcessor extends WorkerHost {
     const { template, contato, conexao } = ctx;
 
     if (!template || !template.metaTemplateName || !template.metaLanguage) {
-      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Template WhatsApp incompleto', false);
+      await this.marcarFalha(
+        tenantId,
+        mensagemId,
+        campanhaId,
+        claimToken,
+        'Template WhatsApp incompleto',
+        false,
+      );
       return;
     }
     if (!contato || !contato.telefoneE164) {
-      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Contato sem telefone', false);
+      await this.marcarFalha(
+        tenantId,
+        mensagemId,
+        campanhaId,
+        claimToken,
+        'Contato sem telefone',
+        false,
+      );
       return;
     }
     if (!contato.optInWhatsapp) {
-      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Contato sem opt-in WhatsApp', false);
+      await this.marcarFalha(
+        tenantId,
+        mensagemId,
+        campanhaId,
+        claimToken,
+        'Contato sem opt-in WhatsApp',
+        false,
+      );
       return;
     }
     if (!conexao || conexao.status !== 'ATIVA') {
       // Conexão caiu — retryable (admin pode reativar).
-      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Conexão WhatsApp inativa', true);
+      await this.marcarFalha(
+        tenantId,
+        mensagemId,
+        campanhaId,
+        claimToken,
+        'Conexão WhatsApp inativa',
+        true,
+      );
       return;
     }
 
@@ -139,45 +193,60 @@ export class DispatchWhatsappProcessor extends WorkerHost {
         language: template.metaLanguage,
         variables: variaveis,
       });
-      const providerMessageId = r.messages[0]?.id ?? null;
+      const providerMessageId = r.messages[0]?.id;
+      if (!providerMessageId) {
+        throw new Error('Meta aceitou a requisição sem retornar o ID da mensagem.');
+      }
 
       await this.prisma.runInTenant(tenantId, async (tx) => {
-        await tx.mensagem.update({
-          where: { id: mensagemId },
+        const concluida = await tx.mensagem.updateMany({
+          where: { id: mensagemId, status: 'PROCESSANDO', processamentoToken: claimToken },
           data: {
             status: 'ENVIADA',
             enviadaEm: new Date(),
             providerMessageId,
+            processamentoToken: null,
+            processamentoIniciadoEm: null,
             custoEstimadoBrl: new Prisma.Decimal(CUSTO_REFERENCIA.whatsappMarketingBr),
             statusHistory: { push: { status: 'ENVIADA', at: new Date().toISOString() } },
           },
         });
-        await tx.campanha.update({
-          where: { id: campanhaId },
-          data: { totalEnviados: { increment: 1 } },
-        });
+        if (concluida.count > 0) {
+          await tx.campanha.update({
+            where: { id: campanhaId },
+            data: { totalEnviados: { increment: 1 } },
+          });
+          await tx.usageLog.create({
+            data: {
+              tenantId,
+              servico: 'meta.whatsapp.marketing.br',
+              custoEstimadoBrl: new Prisma.Decimal(CUSTO_REFERENCIA.whatsappMarketingBr),
+              metadados: { mensagemId, campanhaId, providerMessageId },
+            },
+          });
+        }
       });
-
-      await this.usage.log(
-        tenantId,
-        'meta.whatsapp.marketing.br',
-        CUSTO_REFERENCIA.whatsappMarketingBr,
-        { mensagemId, campanhaId, providerMessageId },
-      );
     } catch (err) {
       if (err instanceof MetaApiError) {
         const motivo =
           (err.codigo !== undefined ? MOTIVOS_META[err.codigo] : undefined) ??
           `Meta erro ${err.codigo ?? err.status}`;
-        await this.marcarFalha(tenantId, mensagemId, campanhaId, motivo, err.retryable);
-      } else {
-        this.logger.warn({ msg: 'dispatch_wa_erro_inesperado', mensagemId, err });
         await this.marcarFalha(
           tenantId,
           mensagemId,
           campanhaId,
+          claimToken,
+          motivo,
+          err.retryable,
+        );
+      } else {
+        this.logger.warn({ msg: 'dispatch_wa_erro_inesperado', mensagemId, err });
+        await this.marcarIncerto(
+          tenantId,
+          mensagemId,
+          campanhaId,
+          claimToken,
           err instanceof Error ? err.message.slice(0, 200) : 'Erro',
-          true,
         );
       }
     }
@@ -187,25 +256,59 @@ export class DispatchWhatsappProcessor extends WorkerHost {
     tenantId: string,
     mensagemId: string,
     campanhaId: string,
+    claimToken: string,
     motivo: string,
     retryable: boolean,
   ): Promise<void> {
     await this.prisma.runInTenant(tenantId, async (tx) => {
-      await tx.mensagem.update({
-        where: { id: mensagemId },
+      const alterada = await tx.mensagem.updateMany({
+        where: { id: mensagemId, status: 'PROCESSANDO', processamentoToken: claimToken },
         data: {
           status: 'FALHOU',
           falhaMotivo: motivo,
+          processamentoToken: null,
+          processamentoIniciadoEm: null,
           // O RetryProcessor lê `retryable` no statusHistory para decidir reenfileirar.
           statusHistory: {
             push: { status: 'FALHOU', motivo, retryable, at: new Date().toISOString() },
           },
         },
       });
-      await tx.campanha.update({
-        where: { id: campanhaId },
-        data: { totalFalhas: { increment: 1 } },
+      if (alterada.count > 0) {
+        await tx.campanha.update({
+          where: { id: campanhaId },
+          data: { totalFalhas: { increment: 1 } },
+        });
+      }
+    });
+  }
+
+  private async marcarIncerto(
+    tenantId: string,
+    mensagemId: string,
+    campanhaId: string,
+    claimToken: string,
+    motivo: string,
+  ): Promise<void> {
+    await this.prisma.runInTenant(tenantId, async (tx) => {
+      const alterada = await tx.mensagem.updateMany({
+        where: { id: mensagemId, status: 'PROCESSANDO', processamentoToken: claimToken },
+        data: {
+          status: 'ENVIO_INCERTO',
+          falhaMotivo: motivo,
+          processamentoToken: null,
+          processamentoIniciadoEm: null,
+          statusHistory: {
+            push: { status: 'ENVIO_INCERTO', motivo, at: new Date().toISOString() },
+          },
+        },
       });
+      if (alterada.count > 0) {
+        await tx.campanha.updateMany({
+          where: { id: campanhaId, status: { in: ['AGENDADA', 'DISPARANDO'] } },
+          data: { status: 'PAUSADA' },
+        });
+      }
     });
   }
 }

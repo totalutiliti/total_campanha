@@ -54,9 +54,9 @@ export default function EditarContatoPage() {
         email: p.email,
         telefoneE164: p.telefoneE164,
         tags: p.tags,
-        optInEmail: p.optInEmail,
-        optInWhatsapp: p.optInWhatsapp,
       };
+      if (p.optInEmail === false) body.optInEmail = false;
+      if (p.optInWhatsapp === false) body.optInWhatsapp = false;
       if (p.nome) body.nome = p.nome;
       await api({ method: 'PATCH', path: `/contatos/${id}`, body });
       router.push('/contatos');
@@ -93,7 +93,7 @@ export default function EditarContatoPage() {
       </Link>
       <h1 className="mt-2 text-3xl font-bold">Editar contato</h1>
       <p className="mb-6 mt-1 text-sm text-muted-foreground">
-        Atualize os dados ou o consentimento (opt-in) deste cliente.
+        Atualize os dados ou revogue um consentimento existente.
       </p>
 
       {carregando ? (

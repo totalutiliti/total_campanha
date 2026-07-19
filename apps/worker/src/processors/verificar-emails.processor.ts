@@ -2,6 +2,7 @@ import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger, OnModuleInit } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 
+import { ControlPlanePrismaService } from '../common/control-plane-prisma.service.js';
 import { PrismaService } from '../common/prisma.service.js';
 import { WorkerSesIdentityClient } from '../integrations/ses-identity.client.js';
 
@@ -13,9 +14,8 @@ const REPEAT_KEY = 'verificar-emails-pendentes';
  * em status PENDENTE_VERIFICACAO de TODOS os tenants e ativa quando DKIM
  * estiver SUCCESS.
  *
- * Esta fila é tenant-agnostic — usa o role `migration_user` (BYPASSRLS) através
- * da string `DATABASE_URL` direta. Como auditoria, escrevemos no `audit_logs`
- * de cada tenant via runInTenant.
+ * A descoberta cross-tenant usa a conexão isolada do plano de controle.
+ * Atualização e auditoria usam `runInTenant`, sob RLS.
  */
 @Processor(QUEUE_NAME, { concurrency: 1 })
 export class VerificarEmailsProcessor extends WorkerHost implements OnModuleInit {
@@ -23,6 +23,7 @@ export class VerificarEmailsProcessor extends WorkerHost implements OnModuleInit
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly control: ControlPlanePrismaService,
     private readonly ses: WorkerSesIdentityClient,
     @InjectQueue(QUEUE_NAME) private readonly fila: Queue,
   ) {
@@ -49,10 +50,8 @@ export class VerificarEmailsProcessor extends WorkerHost implements OnModuleInit
   }
 
   async process(_job: Job): Promise<{ checadas: number; ativadas: number }> {
-    // Lê todas conexões PENDENTE_VERIFICACAO sem filtro de tenant.
-    // Não usamos runInTenant aqui porque o role do worker é migration_user
-    // (BYPASSRLS). Por segurança, agrupamos por tenant antes de auditar.
-    const pendentes = await this.prisma.conexaoEmail.findMany({
+    // Apenas descobre os IDs sem filtro de tenant; não faz mutação por aqui.
+    const pendentes = await this.control.conexaoEmail.findMany({
       where: { status: 'PENDENTE_VERIFICACAO' },
     });
 
@@ -73,14 +72,12 @@ export class VerificarEmailsProcessor extends WorkerHost implements OnModuleInit
               : 'PENDENTE_VERIFICACAO';
 
         if (novoStatus !== conexao.status) {
-          await this.prisma.conexaoEmail.update({
-            where: { id: conexao.id },
-            data: { status: novoStatus, dkimStatus: r.dkimStatus.toLowerCase() },
-          });
-          if (novoStatus === 'ATIVA') ativadas += 1;
-
-          // Audit log no tenant.
           await this.prisma.runInTenant(conexao.tenantId, async (tx) => {
+            await tx.conexaoEmail.update({
+              where: { id: conexao.id },
+              data: { status: novoStatus, dkimStatus: r.dkimStatus.toLowerCase() },
+            });
+            if (novoStatus === 'ATIVA') ativadas += 1;
             await tx.auditLog.create({
               data: {
                 tenantId: conexao.tenantId,

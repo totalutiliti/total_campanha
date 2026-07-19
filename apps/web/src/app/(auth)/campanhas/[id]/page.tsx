@@ -3,7 +3,7 @@
 import { ArrowLeft, Loader2, Pause, Play, Send, Trash2, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { AlertAviso, AlertErro, AlertSucesso } from '../../../../components/ui/alerts';
 import { Badge } from '../../../../components/ui/badge';
@@ -80,9 +80,9 @@ export default function CampanhaDetalhePage() {
   const [acaoMsg, setAcaoMsg] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
   // Dialog de confirmação (substitui window.confirm — mesmo efeito, só apresentação).
-  const [confirmando, setConfirmando] = useState<'cancelar' | 'excluir' | null>(null);
+  const [confirmando, setConfirmando] = useState<'disparar' | 'cancelar' | 'excluir' | null>(null);
 
-  async function buscarCampanhaEStatus(): Promise<Campanha> {
+  const buscarCampanhaEStatus = useCallback(async (): Promise<Campanha> => {
     const c = await api<Campanha>({ path: `/campanhas/${id}` });
     setCampanha(c);
     if (c.status === 'RASCUNHO') {
@@ -103,7 +103,23 @@ export default function CampanhaDetalhePage() {
       }
     }
     return c;
-  }
+  }, [api, id]);
+
+  const verificarConexao = useCallback(
+    async (canal: 'EMAIL' | 'WHATSAPP'): Promise<boolean> => {
+      try {
+        if (canal === 'WHATSAPP') {
+          const w = await api<{ status: string }>({ path: '/conexoes/whatsapp' });
+          return w?.status === 'ATIVA';
+        }
+        const es = await api<{ status: string }[]>({ path: '/conexoes/email' });
+        return Array.isArray(es) && es.some((e) => e.status === 'ATIVA');
+      } catch {
+        return false;
+      }
+    },
+    [api],
+  );
 
   // Carga inicial: campanha + nomes + conexão.
   useEffect(() => {
@@ -135,7 +151,7 @@ export default function CampanhaDetalhePage() {
     return () => {
       ativo = false;
     };
-  }, [id]);
+  }, [api, buscarCampanhaEStatus, verificarConexao]);
 
   // Auto-atualiza enquanto está enviando/agendada.
   useEffect(() => {
@@ -144,20 +160,7 @@ export default function CampanhaDetalhePage() {
       buscarCampanhaEStatus().catch(() => {});
     }, 5000);
     return () => clearInterval(t);
-  }, [campanha?.status]);
-
-  async function verificarConexao(canal: 'EMAIL' | 'WHATSAPP'): Promise<boolean> {
-    try {
-      if (canal === 'WHATSAPP') {
-        const w = await api<{ status: string }>({ path: '/conexoes/whatsapp' });
-        return w?.status === 'ATIVA';
-      }
-      const es = await api<{ status: string }[]>({ path: '/conexoes/email' });
-      return Array.isArray(es) && es.some((e) => e.status === 'ATIVA');
-    } catch {
-      return false;
-    }
-  }
+  }, [buscarCampanhaEStatus, campanha?.status]);
 
   async function acao(caminho: 'disparar' | 'pausar' | 'cancelar') {
     setProcessando(true);
@@ -339,7 +342,7 @@ export default function CampanhaDetalhePage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              onClick={() => acao('disparar')}
+              onClick={() => setConfirmando('disparar')}
               disabled={processando || conexaoAtiva !== true || estimativa?.destinatarios === 0}
             >
               {processando ? (
@@ -418,7 +421,7 @@ export default function CampanhaDetalhePage() {
         {isPausada && (
           <Button
             type="button"
-            onClick={() => acao('disparar')}
+            onClick={() => setConfirmando('disparar')}
             disabled={processando || conexaoAtiva !== true}
           >
             <Play className="mr-2 h-4 w-4" />
@@ -464,7 +467,46 @@ export default function CampanhaDetalhePage() {
 
       {/* Confirmações (Dialog do kit no lugar de window.confirm) */}
       <Dialog open={confirmando !== null} onOpenChange={(aberto) => !aberto && setConfirmando(null)}>
-        {confirmando === 'cancelar' ? (
+        {confirmando === 'disparar' ? (
+          <>
+            <DialogHeader
+              titulo={campanha.agendadoPara ? 'Confirmar agendamento?' : 'Confirmar disparo?'}
+              descricao="Revise os dados abaixo. Ao confirmar, a campanha entra na fila e pode gerar cobrança nos provedores conectados."
+            />
+            <div className="grid grid-cols-2 gap-3 rounded-lg border bg-card p-4 text-sm text-card-foreground">
+              <Item label="Canal">{canalLabel(campanha.canal)}</Item>
+              <Item label="Destinatários">
+                {estimativa?.destinatarios ??
+                  Math.max(campanha.totalDestinatarios - campanha.totalEnviados, 0)}
+              </Item>
+              <Item label="Custo estimado">
+                {brl(
+                  estimativa?.custoEstimadoBrl ??
+                    (campanha.custoEstimadoBrl ? Number(campanha.custoEstimadoBrl) : null),
+                )}
+              </Item>
+              <Item label="Início">
+                {campanha.agendadoPara
+                  ? new Date(campanha.agendadoPara).toLocaleString('pt-BR')
+                  : 'Assim que confirmar'}
+              </Item>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmando(null)}>
+                Voltar
+              </Button>
+              <Button
+                onClick={() => {
+                  setConfirmando(null);
+                  acao('disparar');
+                }}
+              >
+                <Send className="mr-2 h-4 w-4" />
+                Confirmar {campanha.agendadoPara ? 'agendamento' : 'disparo'}
+              </Button>
+            </DialogFooter>
+          </>
+        ) : confirmando === 'cancelar' ? (
           <>
             <DialogHeader
               titulo="Cancelar esta campanha?"
@@ -485,7 +527,7 @@ export default function CampanhaDetalhePage() {
               </Button>
             </DialogFooter>
           </>
-        ) : (
+        ) : confirmando === 'excluir' ? (
           <>
             <DialogHeader
               titulo="Excluir esta campanha?"
@@ -506,7 +548,7 @@ export default function CampanhaDetalhePage() {
               </Button>
             </DialogFooter>
           </>
-        )}
+        ) : null}
       </Dialog>
     </div>
   );

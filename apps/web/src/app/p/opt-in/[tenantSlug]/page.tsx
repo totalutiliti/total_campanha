@@ -6,7 +6,7 @@ import { apiGet } from '../../../../lib/api';
 import { OptInForm } from './opt-in-form';
 
 interface PageProps {
-  params: { tenantSlug: string };
+  params: Promise<{ tenantSlug: string }>;
 }
 
 interface TenantLanding {
@@ -17,9 +17,10 @@ interface TenantLanding {
 // Página pública — sem rastreadores, sem analytics, sem cookies (LGPD).
 // A página é do TENANT: o nome da empresa dele é o título (sem logo da plataforma).
 export default async function OptInPage({ params }: PageProps) {
+  const { tenantSlug } = await params;
   let tenant: TenantLanding;
   try {
-    tenant = await apiGet<TenantLanding>(`/p/opt-in/${encodeURIComponent(params.tenantSlug)}`);
+    tenant = await apiGet<TenantLanding>(`/p/opt-in/${encodeURIComponent(tenantSlug)}`);
   } catch {
     notFound();
   }
