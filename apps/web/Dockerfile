@@ -27,6 +27,7 @@ ARG NEXT_PUBLIC_APP_URL=http://localhost:3000
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_TELEMETRY_DISABLED=1
+COPY .eslintrc.cjs ./
 COPY tsconfig.base.json turbo.json ./
 COPY packages ./packages
 COPY apps/web ./apps/web
