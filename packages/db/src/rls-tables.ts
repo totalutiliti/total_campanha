@@ -16,6 +16,8 @@ export const RLS_TENANT_TABLES = [
   'conexoes_whatsapp',
   'conexoes_email',
   'opt_in_logs',
+  'consentimentos_pendentes',
+  'webhook_eventos',
   'audit_logs',
   'inbox_conversas',
   'inbox_mensagens',

@@ -52,8 +52,6 @@ type ResultadoImport = ResultadoImportSync | ResultadoImportAsync;
 
 interface OpcoesImport {
   modo: 'upsert' | 'ignorar';
-  optInEmail: boolean;
-  optInWhatsapp: boolean;
 }
 
 type Etapa =
@@ -133,7 +131,7 @@ export default function ImportarContatosPage() {
       nomeArquivo: etapa.nomeArquivo,
       csvFinal,
       validacao,
-      opcoes: { modo: 'upsert', optInEmail: false, optInWhatsapp: false },
+      opcoes: { modo: 'upsert' },
     });
   }
 
@@ -146,8 +144,6 @@ export default function ImportarContatosPage() {
       const form = new FormData();
       form.append('arquivo', blob, 'contatos.csv');
       form.append('modo', etapa.opcoes.modo);
-      form.append('optInEmail', String(etapa.opcoes.optInEmail));
-      form.append('optInWhatsapp', String(etapa.opcoes.optInWhatsapp));
 
       const r = await api<ResultadoImport>({
         method: 'POST',
@@ -576,34 +572,10 @@ function EtapaPreview({
           </div>
         </fieldset>
 
-        <fieldset>
-          <legend className="mb-1 text-xs font-medium text-muted-foreground">
-            Marcar como já tendo aceitado receber por:
-          </legend>
-          <div className="flex gap-4">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={opcoes.optInEmail}
-                onChange={(e) => aoMudarOpcoes({ ...opcoes, optInEmail: e.target.checked })}
-                className="h-4 w-4 rounded accent-primary"
-              />
-              <span>E-mail</span>
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={opcoes.optInWhatsapp}
-                onChange={(e) => aoMudarOpcoes({ ...opcoes, optInWhatsapp: e.target.checked })}
-                className="h-4 w-4 rounded accent-primary"
-              />
-              <span>WhatsApp</span>
-            </label>
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Só marque se você tem o consentimento documentado (LGPD). Em caso de dúvida, deixe desmarcado e use a página pública de opt-in.
-          </p>
-        </fieldset>
+        <AlertAviso>
+          Contatos importados entram sem opt-in. Depois da importação, envie a página pública
+          de consentimento da sua empresa para registrar a autorização de cada titular.
+        </AlertAviso>
       </div>
 
       <p className="text-xs text-muted-foreground">

@@ -15,6 +15,7 @@ export interface DadosForm {
   wabaId: string;
   phoneNumberId: string;
   token: string;
+  appSecret: string;
 }
 
 export interface ResultadoConexao {
@@ -43,7 +44,12 @@ interface Props {
  */
 export function WhatsappWizard({ salvar }: Props) {
   const [passo, setPasso] = useState<Passo>('pre-requisitos');
-  const [dados, setDados] = useState<DadosForm>({ wabaId: '', phoneNumberId: '', token: '' });
+  const [dados, setDados] = useState<DadosForm>({
+    wabaId: '',
+    phoneNumberId: '',
+    token: '',
+    appSecret: '',
+  });
   const [resultado, setResultado] = useState<ResultadoConexao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -282,6 +288,22 @@ function PassoDados({
         />
       </Campo>
 
+      <Campo label="App Secret">
+        <Input
+          type="password"
+          value={dados.appSecret}
+          onChange={(e) => onChange({ ...dados, appSecret: e.target.value.trim() })}
+          placeholder="Meta for Developers → Configurações → Básico"
+          name="metaAppSecret"
+          autoComplete="new-password"
+          className="font-mono"
+        />
+      </Campo>
+      <p className="text-xs text-muted-foreground">
+        Usamos o App Secret somente para validar a assinatura dos webhooks. Ele é salvo
+        criptografado e não volta a ser exibido.
+      </p>
+
       {erro && <AlertErro>{erro}</AlertErro>}
 
       <div className="flex gap-2">
@@ -291,7 +313,13 @@ function PassoDados({
         <Button
           type="button"
           onClick={onContinuar}
-          disabled={enviando || !dados.wabaId || !dados.phoneNumberId || !dados.token}
+          disabled={
+            enviando ||
+            !dados.wabaId ||
+            !dados.phoneNumberId ||
+            !dados.token ||
+            !dados.appSecret
+          }
         >
           {enviando ? (
             <>

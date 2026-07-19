@@ -19,6 +19,11 @@ USING (tenant_id = current_setting('app.current_tenant', true)::uuid)
 
 1.6. **Super Admin** usa role separado com `BYPASSRLS`, com audit log em toda ação.
 
+1.7. **Worker operacional usa `app_user`**, nunca `migration_user`. Descobertas
+cross-tenant de jobs recorrentes usam cliente de control-plane separado e de
+somente leitura; cada acesso de domínio volta a `runInTenant`. O processo deve
+abortar no boot se `DATABASE_URL` contiver a role privilegiada.
+
 ## 2. Banco de dados em produção
 
 2.1. **PROIBIDO** em PROD (nunca, sem exceção):

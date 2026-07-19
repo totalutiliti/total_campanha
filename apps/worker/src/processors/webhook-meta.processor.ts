@@ -8,6 +8,7 @@ import { enviarAlertaSlack } from '../common/slack.js';
 
 interface WebhookJob {
   tenantId: string;
+  eventoId: string;
   payload: unknown;
 }
 
@@ -54,7 +55,12 @@ export class WebhookMetaProcessor extends WorkerHost {
   }
 
   async process(job: Job<WebhookJob>): Promise<void> {
-    const { tenantId, payload } = job.data;
+    const { tenantId, eventoId, payload } = job.data;
+    const evento = await this.prisma.runInTenant(tenantId, (tx) =>
+      tx.webhookEvento.findUnique({ where: { id: eventoId } }),
+    );
+    if (!evento || evento.processadoEm) return;
+
     const entries = extrairEntries(payload);
 
     for (const value of entries) {
@@ -73,6 +79,13 @@ export class WebhookMetaProcessor extends WorkerHost {
       // throttle do disparo acompanhar o limite real.
       await this.processarTierUpdate(tenantId, value as Record<string, unknown>);
     }
+
+    await this.prisma.runInTenant(tenantId, (tx) =>
+      tx.webhookEvento.updateMany({
+        where: { id: eventoId, processadoEm: null },
+        data: { processadoEm: new Date() },
+      }),
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -134,6 +147,7 @@ export class WebhookMetaProcessor extends WorkerHost {
         this.logger.debug({ msg: 'status_sem_mensagem', providerMessageId: st.id });
         return;
       }
+      if (mensagem.status === 'FALHOU' && alvo.status === 'FALHOU') return;
 
       // Não regride status (read não vira delivered).
       const ordem = ['ENVIADA', 'ENTREGUE', 'LIDA'];
@@ -204,6 +218,12 @@ export class WebhookMetaProcessor extends WorkerHost {
     const conteudo = msg.text?.body?.trim() ?? '';
 
     await this.prisma.runInTenant(tenantId, async (tx) => {
+      const jaProcessada = await tx.inboxMensagem.findFirst({
+        where: { providerMessageId: msg.id },
+        select: { id: true },
+      });
+      if (jaProcessada) return;
+
       // Contato — find or create (mensagem recebida não implica opt-in).
       let contato = await tx.contato.findFirst({ where: { telefoneE164: telefone } });
       if (!contato) {
@@ -247,6 +267,7 @@ export class WebhookMetaProcessor extends WorkerHost {
           conversaId: conversa.id,
           direcao: 'in',
           conteudo: conteudo || `[${msg.type ?? 'desconhecido'}]`,
+          providerMessageId: msg.id,
         },
       });
 

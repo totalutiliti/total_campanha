@@ -28,16 +28,16 @@ export function variaveisDoContato(contato: ContatoRender): Record<string, unkno
  * Renderiza MJML → HTML com interpolação Mustache (igual ao MjmlRenderService
  * da API). Mustache antes do MJML para variáveis em href/style funcionarem.
  */
-export function renderizarEmail(
+export async function renderizarEmail(
   mjml: string,
   variaveis: Record<string, unknown>,
-): string {
+): Promise<string> {
+  if (mjml.length > 200_000) throw new Error('Template MJML excede o limite de 200 mil caracteres.');
   const interpolado = Mustache.render(mjml, variaveis);
-  // O typing do mjml declara retorno como Promise; em runtime é síncrono.
-  const r = mjml2html(interpolado, {
+  const r = await mjml2html(interpolado, {
     keepComments: false,
     validationLevel: 'soft',
-  }) as unknown as { html: string };
+  });
   return r.html;
 }
 

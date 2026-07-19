@@ -62,11 +62,16 @@ export function OptInForm({ tenantSlug, razaoSocial }: Props) {
   if (estado.tipo === 'ok') {
     return (
       <AlertSucesso>
-        <h2 className="text-base font-medium">Inscrição confirmada!</h2>
+        <h2 className="text-base font-medium">Solicitação registrada</h2>
         <p className="mt-1">
-          Obrigado por se inscrever para receber comunicações de {razaoSocial}.
-          {estado.doubleOptInEnviado
-            ? ' Enviamos um e-mail de confirmação para você.'
+          {canalWhatsapp
+            ? ` Seu consentimento para WhatsApp de ${razaoSocial} foi registrado.`
+            : ''}
+          {canalEmail && estado.doubleOptInEnviado
+            ? ' Enviamos um link: o e-mail só será ativado depois que você confirmar.'
+            : ''}
+          {canalEmail && !estado.doubleOptInEnviado
+            ? ' Não conseguimos enviar o link de confirmação do e-mail; tente novamente mais tarde.'
             : ''}
         </p>
       </AlertSucesso>

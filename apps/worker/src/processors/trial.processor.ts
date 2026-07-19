@@ -2,6 +2,7 @@ import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger, OnModuleInit } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 
+import { ControlPlanePrismaService } from '../common/control-plane-prisma.service.js';
 import { MailService } from '../common/mail.service.js';
 import { PrismaService } from '../common/prisma.service.js';
 
@@ -22,7 +23,8 @@ const MARCOS = [
  *   - trialAteEm já passou → status INADIMPLENTE (freeze de envios).
  *   - faltam 7/3/1 dias → envia email de lembrete (uma vez por marco).
  *
- * Cross-tenant (BYPASSRLS). `tenants` é tabela global.
+ * A descoberta cross-tenant usa o plano de controle; audit_logs sempre passa
+ * pelo runtime com RLS.
  */
 @Processor(QUEUE_NAME, { concurrency: 1 })
 export class TrialProcessor extends WorkerHost implements OnModuleInit {
@@ -30,6 +32,7 @@ export class TrialProcessor extends WorkerHost implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly control: ControlPlanePrismaService,
     private readonly mail: MailService,
     @InjectQueue(QUEUE_NAME) private readonly fila: Queue,
   ) {
@@ -48,7 +51,7 @@ export class TrialProcessor extends WorkerHost implements OnModuleInit {
   }
 
   async process(_job: Job): Promise<{ expirados: number; lembretes: number }> {
-    const tenants = await this.prisma.tenant.findMany({ where: { status: 'TRIAL' } });
+    const tenants = await this.control.tenant.findMany({ where: { status: 'TRIAL' } });
     const agora = Date.now();
     let expirados = 0;
     let lembretes = 0;
@@ -63,15 +66,17 @@ export class TrialProcessor extends WorkerHost implements OnModuleInit {
           where: { id: tenant.id },
           data: { status: 'INADIMPLENTE' },
         });
-        await this.prisma.auditLog.create({
-          data: {
-            tenantId: tenant.id,
-            userId: null,
-            acao: 'billing.trial_expirado',
-            recurso: tenant.id,
-            dados: { trialAteEm: tenant.trialAteEm.toISOString() },
-          },
-        });
+        await this.prisma.runInTenant(tenant.id, (tx) =>
+          tx.auditLog.create({
+            data: {
+              tenantId: tenant.id,
+              userId: null,
+              acao: 'billing.trial_expirado',
+              recurso: tenant.id,
+              dados: { trialAteEm: tenant.trialAteEm?.toISOString() },
+            },
+          }),
+        );
         expirados += 1;
         continue;
       }
@@ -102,7 +107,7 @@ export class TrialProcessor extends WorkerHost implements OnModuleInit {
     razaoSocial: string,
     dias: number,
   ): Promise<boolean> {
-    const adminUt = await this.prisma.userTenant.findFirst({
+    const adminUt = await this.control.userTenant.findFirst({
       where: { tenantId, role: 'ADMIN' },
       include: { user: true },
     });

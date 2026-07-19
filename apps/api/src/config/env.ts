@@ -44,6 +44,7 @@ export const EnvSchema = z.object({
   RATE_LIMIT_AUTH_WINDOW_MIN: z.coerce.number().int().positive().default(15),
 
   CURRENT_OPT_IN_TERM_VERSION: z.string().default('2026-05-01'),
+  OPT_IN_CONFIRM_TTL_HOURS: z.coerce.number().int().positive().max(168).default(48),
   OPT_OUT_TOKEN_SECRET: z.string().min(16).optional(),
 
   // Mail
@@ -63,6 +64,10 @@ export const EnvSchema = z.object({
 
   // URLs públicas para construir links em emails
   PUBLIC_OPT_IN_BASE_URL: z.string().url().default('http://localhost:3000/p/opt-in'),
+  PUBLIC_OPT_IN_CONFIRM_BASE_URL: z
+    .string()
+    .url()
+    .default('http://localhost:3000/p/opt-in/confirmar'),
   PUBLIC_OPT_OUT_BASE_URL: z.string().url().default('http://localhost:3000/p/opt-out'),
   // Base do app web (links de redefinição de senha etc). Se ausente, derivamos
   // a origem de PUBLIC_OPT_IN_BASE_URL.
@@ -106,6 +111,9 @@ export function loadEnv(raw: NodeJS.ProcessEnv): Env {
     throw new Error(
       '[env] ASAAS_API_KEY configurada sem ASAAS_WEBHOOK_TOKEN — o webhook de billing ficaria aberto.',
     );
+  }
+  if (env.NODE_ENV === 'production' && !env.RECAPTCHA_SECRET) {
+    throw new Error('[env] RECAPTCHA_SECRET é obrigatória em produção.');
   }
   return env;
 }
