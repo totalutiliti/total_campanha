@@ -44,6 +44,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
             'req.body.senha',
             'req.body.novaSenha',
             'req.body.token',
+            'req.body.appSecret',
             'res.headers["set-cookie"]',
           ],
           censor: '[REDACTED]',

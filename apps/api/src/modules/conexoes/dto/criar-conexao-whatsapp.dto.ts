@@ -13,6 +13,7 @@ export const CriarConexaoWhatsappSchema = z.object({
     .max(40)
     .regex(/^\d+$/, 'phoneNumberId deve conter apenas dígitos'),
   token: z.string().min(20),
+  appSecret: z.string().min(16).max(200),
 });
 
 export class CriarConexaoWhatsappDto extends createZodDto(CriarConexaoWhatsappSchema) {}

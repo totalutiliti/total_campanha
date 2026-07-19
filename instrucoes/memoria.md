@@ -10,6 +10,79 @@
 
 ---
 
+## 2026-07-19 — Remediação F0 da auditoria de prontidão comercial
+
+**Categoria:** Segurança / Multi-tenancy / Filas / LGPD / Supply chain / UX
+
+Branch local `fix/auditoria-prontidao-f0`, criada de `dev` sincronizada no commit
+`34f7d15f98a09ee753ae43fa8e6f8ff054095193`. Não houve deploy, acesso a PROD,
+aplicação de migration em ambiente persistente, envio real, commit ou push.
+
+- **Worker/RLS:** `DATABASE_URL` operacional exige `app_user`; produção exige
+  `DATABASE_MIGRATION_URL` distinta. `ControlPlanePrismaService` usa a role
+  privilegiada só para descobrir tenants/IDs; mutações de domínio voltam a
+  `runInTenant`. Boot rejeita `migration_user` como runtime.
+- **Dispatch:** claim atômico por UUID (`PROCESSANDO`), token de propriedade,
+  contador de tentativas e `ENVIO_INCERTO`. Resultado externo ambíguo pausa a
+  campanha e não entra em retry automático. Status, custo e contador concluem
+  na mesma transação. Email resolve o remetente da conexão ativa do tenant.
+- **Webhook Meta:** App Secret cifrado por tenant; API usa corpo bruto e valida
+  `X-Hub-Signature-256`; `webhook_eventos` deduplica por hash antes da fila;
+  provider IDs protegem inbox/contadores contra reprocessamento.
+- **Consentimento/LGPD:** email só ativa após token single-use/expirável em
+  `consentimentos_pendentes`; criação/edição/importação administrativa não
+  concedem opt-in. Hard delete remove inbox/pendências, anonimiza mensagens e
+  PII de `opt_in_logs` por função tenant-scoped e grava OPT_OUT sem PII por canal.
+- **Consistência/UX:** signup cria tenant, user, vínculo e auditoria em uma única
+  transação; conflitos são genéricos. Campanha exige Dialog de confirmação com
+  canal, destinatários, custo e horário. Dialog ganhou nome, trap/restore de foco
+  e Escape. Wizard WhatsApp coleta App Secret mascarado.
+- **Supply chain/CI:** Next `15.5.18`, React `19.1.2`, MJML `5.4.0` assíncrono,
+  Nodemailer `9.0.3`, overrides Multer `2.2.0` e Lodash `4.18.1`; CI roda em
+  `main`/`dev` e bloqueia vulnerabilidade runtime alta/crítica. Build Windows não
+  gera `standalone` por limitação de symlink; Docker/CI Linux continuam gerando.
+- **Migration local criada:** `0003_dispatch_consent_webhook_hardening`, apenas
+  aditiva. Inclui novos campos/estados, duas tabelas com RLS e função LGPD. Foi
+  aplicada somente em PostgreSQL descartável de Testcontainers.
+- **Evidências locais verdes:** lint; typecheck (7 tarefas); build Next (29 páginas);
+  audit runtime (zero alta/crítica, 3 moderadas que exigem Nest 11/file-type 21);
+  testes raiz (39) e isolamento
+  obrigatório (37). A auditoria histórica continua com veredicto de não vender:
+  altos não-F0, ambiente real, E2E, provedores, DR e aprovações humanas permanecem.
+
+Documentos alinhados: `.env.example`, `infra/dev/README.md`, `docs/SPECS.md`,
+`docs/ARCHITECTURE.md`, `docs/RULES.md`, `instrucao_whatsapp_byoa.md`,
+`instrucao_lgpd_dpa.md` e apêndice de remediação em `docs/auditoria-produto/`.
+
+## 2026-06-15 — Infra de lançamento ENXUTA (main.lean.bicep) + aba Manual
+
+**Categoria:** Infra / Custo / Frontend
+
+Decisão de custo pro go-live: PROD sobe num perfil **enxuto** (~R$ 300/mês), não no HA
+do `main.bicep` (~R$ 2.000-3.000/mês). Razão: modelo **BYOA + multi-tenant** → custo é
+**fixo e compartilhado** entre todos os tenants (marginal por cliente ~R$ 1-5), então o
+limitante é valor/mercado, não custo. Break-even ≈ **4 clientes** a R$ 97.
+
+- **Novo `infra/main.lean.bicep` + `main.parameters.prod-lean.jsonc`** (budget R$ 800):
+  Postgres **B1ms Burstable, sem HA**, 32GB, backup 7d local; Redis **Basic C0**; Storage
+  **LRS**; **sem VNet/Private Endpoints** (público + firewall + TLS); Container Apps
+  api/web **scale-to-zero** (cold start 20-40s aceito), worker min 1, **0.5 vCPU/1Gi**;
+  **Key Vault público (RBAC)** — de quebra resolve o blocker do smoke-test em runner
+  público. **Sem PgBouncer** (não existe no Burstable) → no lean o `DATABASE_URL` conecta
+  direto na **5432**, não em pool.
+- `main.bicep` (HA) fica intacto como referência. **Gatilhos pra migrar p/ HA:** ~15-25
+  clientes pagantes, CPU>70% sustentada, exigência de SLA ou rede privada/compliance.
+- **Bug latente corrigido no `main.bicep`:** `var apps` embutia
+  `appApi.identity.principalId` (runtime) usado em `for` → **BCP178**; o deploy HA
+  falharia no 1º provisionamento (nunca pego porque PROD nunca subiu). Agora itera nomes
+  estáticos e indexa principalIds. Ambos templates validados com `az bicep build` (exit 0).
+- **Frontend:** nova **aba Manual** (`/manual`) com passo a passo contextual de cada tela
+  (abre filtrada pela aba atual via `?secao=`); slots de captura de tela em
+  `apps/web/public/manual/`. No ar no dev (revision `r06151055`).
+- **Preços** revisados (não alterados): Starter R$ 97 / Pro R$ 297 / Enterprise R$ 997 —
+  alinhados ao mercado BR; recomendação foi adicionar tier grátis + plano anual em vez de
+  baixar a régua (custo baixo é vantagem de margem, não motivo p/ cost-plus).
+
 ## 2026-06-12 — Prontidão de produção + identidade visual (branch feat/prontidao-producao)
 
 **Categoria:** Produção / UX / Segurança

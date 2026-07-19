@@ -584,10 +584,14 @@ resource appWorker 'Microsoft.App/containerApps@2024-03-01' = {
 // pela Microsoft — NÃO são segredos).
 var kvSecretsUserRoleId = '4633458b-17de-408a-b874-0445c86b69e6' // Key Vault Secrets User
 
-var apps = [
-  { nome: 'api', principalId: appApi.identity.principalId }
-  { nome: 'web', principalId: appWeb.identity.principalId }
-  { nome: 'worker', principalId: appWorker.identity.principalId }
+// Itera sobre nomes ESTÁTICOS (length conhecido no início) e indexa os
+// principalIds de runtime no corpo — evita BCP178 (coleção de for não pode
+// depender de valores de runtime como appApi.identity.principalId).
+var appNames = ['api', 'web', 'worker']
+var appPrincipals = [
+  appApi.identity.principalId
+  appWeb.identity.principalId
+  appWorker.identity.principalId
 ]
 
 // AcrPull no RG do ACR compartilhado (cross-RG exige module com scope lá).
@@ -596,17 +600,17 @@ module acrPull 'modules/acr-pull.bicep' = {
   scope: resourceGroup(acrResourceGroup)
   params: {
     acrName: nomes.acr
-    principalIds: [for app in apps: app.principalId]
+    principalIds: appPrincipals
   }
 }
 
 resource kvSecretsUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = [
-  for app in apps: {
-    name: guid(keyVault.id, app.nome, 'kvsecrets')
+  for (nome, i) in appNames: {
+    name: guid(keyVault.id, nome, 'kvsecrets')
     scope: keyVault
     properties: {
       roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvSecretsUserRoleId)
-      principalId: app.principalId
+      principalId: appPrincipals[i]
       principalType: 'ServicePrincipal'
     }
   }

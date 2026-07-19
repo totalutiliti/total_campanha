@@ -19,19 +19,21 @@ export interface ResultadoRender {
  */
 @Injectable()
 export class MjmlRenderService {
-  renderizar(mjml: string, variaveis: Record<string, unknown>): ResultadoRender {
+  async renderizar(
+    mjml: string,
+    variaveis: Record<string, unknown>,
+  ): Promise<ResultadoRender> {
+    if (mjml.length > 200_000) {
+      throw new BadRequestException('MJML inválido: limite de 200 mil caracteres excedido.');
+    }
     // Mustache escapa HTML por padrão — ótimo para evitar XSS via {{nome}}.
     const mjmlInterpolado = Mustache.render(mjml, variaveis);
 
     try {
-      // O typing do mjml declara retorno como Promise; em runtime é síncrono.
-      const r = mjml2html(mjmlInterpolado, {
+      const r = await mjml2html(mjmlInterpolado, {
         keepComments: false,
         validationLevel: 'soft',
-      }) as unknown as {
-        html: string;
-        errors: Array<{ line?: number; message: string }>;
-      };
+      });
       return {
         html: r.html,
         warnings: r.errors.map((e) => ({ line: e.line, message: e.message })),

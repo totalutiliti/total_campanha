@@ -2,6 +2,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
+import { ControlPlanePrismaService } from './common/control-plane-prisma.service.js';
 import { CryptoService } from './common/crypto.service.js';
 import { MailService } from './common/mail.service.js';
 import { OptOutTokenService } from './common/opt-out-token.service.js';
@@ -51,6 +52,7 @@ import { WebhookMetaProcessor } from './processors/webhook-meta.processor.js';
   providers: [
     // Infra
     PrismaService,
+    ControlPlanePrismaService,
     CryptoService,
     MailService,
     OptOutTokenService,

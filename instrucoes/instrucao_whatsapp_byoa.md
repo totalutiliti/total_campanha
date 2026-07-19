@@ -108,6 +108,7 @@ No painel `/conexoes/whatsapp`:
 WABA ID:           __________________
 Phone Number ID:   __________________
 Token permanente:  __________________
+App Secret:        __________________
 ```
 
 Botão **"Testar conexão"** → plataforma:
@@ -116,7 +117,9 @@ Botão **"Testar conexão"** → plataforma:
 3. Se 401/403 → erro "Token inválido ou sem permissão para esse número".
 4. Se 404 → erro "Phone Number ID não encontrado nesta conta".
 
-**Importante:** plataforma criptografa o token com pgcrypto antes de gravar. Token nunca aparece em log nem na resposta da API (`GET /conexoes/whatsapp` retorna `tokenPreview: "...XYZ4"`).
+**Importante:** plataforma criptografa o token e o App Secret com pgcrypto antes
+de gravar. Nenhum dos dois aparece em log ou na resposta da API
+(`GET /conexoes/whatsapp` retorna apenas `tokenPreview: "...XYZ4"`).
 
 ## 6. Configurar webhook na Meta (do lado do tenant)
 
@@ -124,11 +127,11 @@ Plataforma gera, para cada tenant:
 - **Callback URL:** `https://api.totalcampanha.com.br/api/v1/webhooks/meta/{tenantSlug}/{webhookSecret}`
 - **Verify Token:** valor de `webhook_secret` na tabela (32 bytes hex).
 
-> O secret faz parte da URL desde 06/2026: é a autenticação do POST de eventos
-> (a Meta não assina o payload sem App Secret por tenant, e o slug é público —
-> aparece na página de opt-in). POST com secret errado é descartado em silêncio
-> (200 sem processar); handshake errado falha alto (403) para o tenant ver na
-> hora que configurou errado.
+> O secret na URL protege o roteamento e o handshake, mas não autentica sozinho
+> o payload. Todo POST deve trazer `X-Hub-Signature-256`, validado sobre o corpo
+> bruto com o App Secret cifrado do tenant. Assinatura/secret inválido é descartado
+> em silêncio (200 sem processar). Payload válido entra em `webhook_eventos` por
+> hash único antes da fila; replay processado não produz novo efeito.
 
 No Meta Developers > app > WhatsApp > Configuração:
 1. **Callback URL:** colar URL acima.

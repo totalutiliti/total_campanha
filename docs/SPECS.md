@@ -137,7 +137,7 @@ model Mensagem {
   id                  String   @id @default(uuid()) @db.Uuid
   tenantId            String   @db.Uuid
   campanhaId          String   @db.Uuid
-  contatoId           String   @db.Uuid
+  contatoId           String?  @db.Uuid
   canal               Canal
   status              StatusMensagem @default(PENDENTE)
   statusHistory       Json     @default("[]")
@@ -147,12 +147,15 @@ model Mensagem {
   entregueEm          DateTime?
   lidaEm              DateTime?
   falhaMotivo         String?
+  processamentoToken  String?
+  processamentoIniciadoEm DateTime?
+  tentativasEnvio     Int      @default(0)
   @@index([tenantId, campanhaId])
   @@index([tenantId, status])
   @@index([providerMessageId])
 }
 
-enum StatusMensagem { PENDENTE ENFILEIRADA ENVIADA ENTREGUE LIDA RESPONDIDA FALHOU CANCELADA }
+enum StatusMensagem { PENDENTE ENFILEIRADA PROCESSANDO ENVIADA ENTREGUE LIDA RESPONDIDA FALHOU ENVIO_INCERTO CANCELADA }
 
 model ConexaoWhatsapp {
   id              String   @id @default(uuid()) @db.Uuid
@@ -161,6 +164,8 @@ model ConexaoWhatsapp {
   phoneNumberId   String
   // Token criptografado via pgcrypto.pgp_sym_encrypt usando chave de Key Vault
   tokenEncrypted  Bytes
+  // App Secret do tenant, cifrado; valida X-Hub-Signature-256 do corpo bruto
+  appSecretEncrypted Bytes?
   webhookSecret   String   // gerado pela plataforma
   tierMeta        TierMeta @default(TIER_250)
   qualityRating   String?  // green/yellow/red (vem da Meta)
@@ -203,6 +208,36 @@ model OptInLog {
 }
 
 enum OptInAcao { OPT_IN OPT_OUT }
+
+model ConsentimentoPendente {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  contatoId    String    @db.Uuid
+  canal        Canal
+  tokenHash    String
+  email        String?
+  ip           String
+  userAgent    String
+  origem       String
+  versaoTermo  String
+  expiraEm     DateTime
+  confirmadoEm DateTime?
+  invalidadoEm DateTime?
+  createdAt    DateTime  @default(now())
+  @@unique([tenantId, tokenHash])
+  @@index([tenantId, contatoId, canal])
+}
+
+model WebhookEvento {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  provedor     String
+  eventoHash   String
+  recebidoEm   DateTime  @default(now())
+  processadoEm DateTime?
+  @@unique([tenantId, provedor, eventoHash])
+  @@index([tenantId, processadoEm])
+}
 
 model AuditLog {
   id        BigInt   @id @default(autoincrement())
@@ -304,16 +339,17 @@ Prefixo `/api/v1`. Auth Bearer JWT.
 |---|---|---|
 | GET | `/p/opt-in/:tenantSlug` | Landing de opt-in |
 | POST | `/p/opt-in/:tenantSlug` | Submit do opt-in |
+| GET | `/p/opt-in/confirmar/:token` | Confirma email (token opaco, single-use e expirável) |
 | GET | `/p/opt-out/:token` | Opt-out one-click |
 | GET | `/p/email/track/open/:msgId` | Pixel de abertura |
 | GET | `/p/email/track/click/:msgId/:linkHash` | Redirect com track |
 
-### Webhooks (sem auth, validados por secret)
+### Webhooks (sem sessão; secret de rota + HMAC do corpo bruto)
 
 | Método | Rota | Source |
 |---|---|---|
-| POST | `/webhooks/meta/:tenantSlug` | WhatsApp Cloud API |
-| GET | `/webhooks/meta/:tenantSlug` | Meta verification handshake |
+| POST | `/webhooks/meta/:tenantSlug/:secret` | WhatsApp Cloud API (`X-Hub-Signature-256` + ledger) |
+| GET | `/webhooks/meta/:tenantSlug/:secret` | Meta verification handshake |
 | POST | `/webhooks/ses` | Amazon SES bounces/complaints (SNS) |
 | POST | `/webhooks/asaas` | Asaas (billing) |
 

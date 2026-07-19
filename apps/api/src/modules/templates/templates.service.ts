@@ -136,7 +136,7 @@ export class TemplatesService {
     if (t.canal === 'EMAIL') {
       if (!t.mjml) throw new BadRequestException('Template sem MJML.');
       const assunto = this.render.renderizarAssunto(t.assunto ?? '', variaveis);
-      const { html, warnings } = this.render.renderizar(t.mjml, variaveis);
+      const { html, warnings } = await this.render.renderizar(t.mjml, variaveis);
       return { canal: 'EMAIL', assunto, html, warnings };
     }
 
@@ -171,7 +171,7 @@ export class TemplatesService {
       if (!dto.destinatarioEmail) {
         throw new BadRequestException('Informe destinatarioEmail para teste de template EMAIL.');
       }
-      const { html } = this.render.renderizar(t.mjml ?? '', variaveis);
+      const { html } = await this.render.renderizar(t.mjml ?? '', variaveis);
       const assunto = this.render.renderizarAssunto(t.assunto ?? '(sem assunto)', variaveis);
       await this.mail.enviar({ to: dto.destinatarioEmail, subject: `[TESTE] ${assunto}`, html });
       await this.audit.log(tenantId, userId, 'template.teste_envio', id, {

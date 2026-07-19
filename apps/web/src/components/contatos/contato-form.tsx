@@ -15,8 +15,8 @@ export interface ContatoPayload {
   email: string | null;
   telefoneE164: string | null;
   tags: string[];
-  optInEmail: boolean;
-  optInWhatsapp: boolean;
+  optInEmail?: false;
+  optInWhatsapp?: false;
 }
 
 export interface ContatoInicial {
@@ -52,8 +52,8 @@ export function ContatoForm({
   const [email, setEmail] = useState(inicial?.email ?? '');
   const [telefone, setTelefone] = useState(inicial?.telefoneE164 ?? '');
   const [tags, setTags] = useState((inicial?.tags ?? []).join(', '));
-  const [optInEmail, setOptInEmail] = useState(inicial?.optInEmail ?? false);
-  const [optInWhatsapp, setOptInWhatsapp] = useState(inicial?.optInWhatsapp ?? false);
+  const [revogarEmail, setRevogarEmail] = useState(false);
+  const [revogarWhatsapp, setRevogarWhatsapp] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
   function submeter(e: React.FormEvent) {
@@ -86,8 +86,8 @@ export function ContatoForm({
       email: emailLimpo || null,
       telefoneE164,
       tags: tagsArr,
-      optInEmail,
-      optInWhatsapp,
+      ...(revogarEmail ? { optInEmail: false as const } : {}),
+      ...(revogarWhatsapp ? { optInWhatsapp: false as const } : {}),
     });
   }
 
@@ -145,31 +145,41 @@ export function ContatoForm({
 
       <fieldset className="rounded-md border p-3">
         <legend className="px-1 text-xs font-medium text-muted-foreground">
-          Pode receber campanhas por
-        </legend>
-        <div className="flex gap-6">
+        Consentimento para campanhas
+      </legend>
+        {inicial?.optInEmail || inicial?.optInWhatsapp ? (
+          <div className="space-y-2">
+            {inicial.optInEmail && (
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={optInEmail}
-              onChange={(e) => setOptInEmail(e.target.checked)}
+                  checked={revogarEmail}
+                  onChange={(e) => setRevogarEmail(e.target.checked)}
               className="h-4 w-4 rounded accent-primary"
             />
-            <span>E-mail</span>
+                <span>Revogar opt-in de e-mail</span>
           </label>
+            )}
+            {inicial.optInWhatsapp && (
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={optInWhatsapp}
-              onChange={(e) => setOptInWhatsapp(e.target.checked)}
+                  checked={revogarWhatsapp}
+                  onChange={(e) => setRevogarWhatsapp(e.target.checked)}
               className="h-4 w-4 rounded accent-primary"
             />
-            <span>WhatsApp</span>
+                <span>Revogar opt-in de WhatsApp</span>
           </label>
+            )}
         </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Este contato está sem opt-in. Para ativar um canal, envie a página pública de
+            consentimento da sua empresa ao titular.
+          </p>
+        )}
         <p className="mt-2 text-xs text-muted-foreground">
-          Marque só se você tem o consentimento da pessoa (LGPD). Sem isso, ela não entra nas
-          campanhas daquele canal.
+          Revogações são imediatas e ficam registradas para auditoria LGPD.
         </p>
       </fieldset>
 

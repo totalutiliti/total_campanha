@@ -2,6 +2,7 @@ import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger, OnModuleInit } from '@nestjs/common';
 import type { Job, Queue } from 'bullmq';
 
+import { ControlPlanePrismaService } from '../common/control-plane-prisma.service.js';
 import { PrismaService } from '../common/prisma.service.js';
 
 const QUEUE_NAME = 'dispatch-retry';
@@ -30,6 +31,7 @@ export class RetryProcessor extends WorkerHost implements OnModuleInit {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly control: ControlPlanePrismaService,
     @InjectQueue(QUEUE_NAME) private readonly filaRetry: Queue,
     @InjectQueue('dispatch-email') private readonly filaEmail: Queue,
     @InjectQueue('dispatch-whatsapp') private readonly filaWhatsapp: Queue,
@@ -44,15 +46,21 @@ export class RetryProcessor extends WorkerHost implements OnModuleInit {
     this.logger.log({ msg: 'retry_recurring_registrado', intervalo: '1min' });
   }
 
-  async process(_job: Job): Promise<{ reenfileiradas: number; desistidas: number }> {
-    // Só mensagens FALHOU de campanhas ativas — cross-tenant (BYPASSRLS).
-    const campanhasAtivas = await this.prisma.campanha.findMany({
-      where: { status: { in: ['DISPARANDO', 'AGENDADA'] } },
-      select: { id: true },
-    });
-    if (campanhasAtivas.length === 0) return { reenfileiradas: 0, desistidas: 0 };
+  async process(
+    _job: Job,
+  ): Promise<{ reenfileiradas: number; desistidas: number; incertas: number }> {
+    const incertas = await this.reconciliarClaimsAbandonados();
 
-    const falhadas = await this.prisma.mensagem.findMany({
+    // O plano de controle apenas descobre IDs; toda mutação abaixo usa RLS.
+    const campanhasAtivas = await this.control.campanha.findMany({
+      where: { status: { in: ['DISPARANDO', 'AGENDADA'] } },
+      select: { id: true, tenantId: true },
+    });
+    if (campanhasAtivas.length === 0) {
+      return { reenfileiradas: 0, desistidas: 0, incertas };
+    }
+
+    const falhadas = await this.control.mensagem.findMany({
       where: {
         status: 'FALHOU',
         campanhaId: { in: campanhasAtivas.map((c) => c.id) },
@@ -118,7 +126,7 @@ export class RetryProcessor extends WorkerHost implements OnModuleInit {
     // ainda existe (waiting/delayed/completed recente), o BullMQ dedupa e nada
     // muda (o delay/throttle original é preservado); se sumiu, ressuscita.
     // `falhaMotivo: null` exclui mensagens em ciclo de retry (jobId próprio).
-    const pendentesSemFalha = await this.prisma.mensagem.findMany({
+    const pendentesSemFalha = await this.control.mensagem.findMany({
       where: {
         status: 'ENFILEIRADA',
         falhaMotivo: null,
@@ -139,22 +147,78 @@ export class RetryProcessor extends WorkerHost implements OnModuleInit {
     // Finaliza campanhas DISPARANDO sem mensagens pendentes/enfileiradas.
     let finalizadas = 0;
     for (const c of campanhasAtivas) {
-      const pendentes = await this.prisma.mensagem.count({
-        where: { campanhaId: c.id, status: { in: ['PENDENTE', 'ENFILEIRADA'] } },
-      });
+      const pendentes = await this.prisma.runInTenant(c.tenantId, (tx) =>
+        tx.mensagem.count({
+          where: {
+            campanhaId: c.id,
+            status: { in: ['PENDENTE', 'ENFILEIRADA', 'PROCESSANDO'] },
+          },
+        }),
+      );
       if (pendentes === 0) {
-        const r = await this.prisma.campanha.updateMany({
-          where: { id: c.id, status: 'DISPARANDO' },
-          data: { status: 'FINALIZADA', finalizadaEm: new Date() },
-        });
+        const r = await this.prisma.runInTenant(c.tenantId, (tx) =>
+          tx.campanha.updateMany({
+            where: { id: c.id, status: 'DISPARANDO' },
+            data: { status: 'FINALIZADA', finalizadaEm: new Date() },
+          }),
+        );
         finalizadas += r.count;
       }
     }
 
-    if (reenfileiradas > 0 || desistidas > 0 || finalizadas > 0) {
-      this.logger.log({ msg: 'retry_scan', reenfileiradas, desistidas, finalizadas });
+    if (reenfileiradas > 0 || desistidas > 0 || finalizadas > 0 || incertas > 0) {
+      this.logger.log({ msg: 'retry_scan', reenfileiradas, desistidas, finalizadas, incertas });
     }
-    return { reenfileiradas, desistidas };
+    return { reenfileiradas, desistidas, incertas };
+  }
+
+  /**
+   * Uma queda após o provedor aceitar a chamada deixa o resultado ambíguo.
+   * Reenviar seria potencialmente duplicar mensagem e cobrança; por isso o
+   * watchdog pausa a campanha e exige reconciliação humana.
+   */
+  private async reconciliarClaimsAbandonados(): Promise<number> {
+    const limite = new Date(Date.now() - 15 * 60_000);
+    const abandonados = await this.control.mensagem.findMany({
+      where: { status: 'PROCESSANDO', processamentoIniciadoEm: { lt: limite } },
+      take: 500,
+      select: { id: true, tenantId: true, campanhaId: true, processamentoToken: true },
+    });
+    let incertas = 0;
+    for (const msg of abandonados) {
+      const alterada = await this.prisma.runInTenant(msg.tenantId, async (tx) => {
+        const r = await tx.mensagem.updateMany({
+          where: {
+            id: msg.id,
+            status: 'PROCESSANDO',
+            processamentoToken: msg.processamentoToken,
+            processamentoIniciadoEm: { lt: limite },
+          },
+          data: {
+            status: 'ENVIO_INCERTO',
+            processamentoToken: null,
+            processamentoIniciadoEm: null,
+            falhaMotivo: 'Resultado do provedor desconhecido; reenvio automático bloqueado.',
+            statusHistory: {
+              push: {
+                status: 'ENVIO_INCERTO',
+                motivo: 'claim expirado',
+                at: new Date().toISOString(),
+              },
+            },
+          },
+        });
+        if (r.count > 0) {
+          await tx.campanha.updateMany({
+            where: { id: msg.campanhaId, status: { in: ['AGENDADA', 'DISPARANDO'] } },
+            data: { status: 'PAUSADA' },
+          });
+        }
+        return r.count;
+      });
+      incertas += alterada;
+    }
+    return incertas;
   }
 }
 

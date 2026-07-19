@@ -1,3 +1,5 @@
+import * as crypto from 'node:crypto';
+
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -12,7 +14,7 @@ import {
   renderizarEmail,
   variaveisDoContato,
 } from '../common/render.js';
-import { CUSTO_REFERENCIA, UsageService } from '../common/usage.service.js';
+import { CUSTO_REFERENCIA } from '../common/usage.service.js';
 
 interface DispatchJob {
   mensagemId: string;
@@ -35,7 +37,6 @@ export class DispatchEmailProcessor extends WorkerHost {
     config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
-    private readonly usage: UsageService,
     private readonly optOutToken: OptOutTokenService,
   ) {
     super();
@@ -57,13 +58,31 @@ export class DispatchEmailProcessor extends WorkerHost {
       return;
     }
 
+    const claimToken = crypto.randomUUID();
     const ctx = await this.prisma.runInTenant(tenantId, async (tx) => {
-      const mensagem = await tx.mensagem.findUnique({ where: { id: mensagemId } });
-      // Idempotência (at-least-once do BullMQ + reconciliação): só processa
-      // mensagem que ainda está aguardando envio.
-      if (!mensagem || (mensagem.status !== 'PENDENTE' && mensagem.status !== 'ENFILEIRADA')) {
+      const claimed = await tx.mensagem.updateMany({
+        where: {
+          id: mensagemId,
+          campanhaId,
+          status: { in: ['PENDENTE', 'ENFILEIRADA'] },
+        },
+        data: {
+          status: 'PROCESSANDO',
+          processamentoToken: claimToken,
+          processamentoIniciadoEm: new Date(),
+          tentativasEnvio: { increment: 1 },
+          falhaMotivo: null,
+          statusHistory: {
+            push: { status: 'PROCESSANDO', at: new Date().toISOString() },
+          },
+        },
+      });
+      if (claimed.count === 0) {
         return null;
       }
+
+      const mensagem = await tx.mensagem.findUnique({ where: { id: mensagemId } });
+      if (!mensagem) return null;
 
       const campanha = await tx.campanha.findUnique({ where: { id: campanhaId } });
       if (!campanha) return null;
@@ -72,7 +91,11 @@ export class DispatchEmailProcessor extends WorkerHost {
       if (campanha.status === 'PAUSADA' || campanha.status === 'CANCELADA') {
         await tx.mensagem.update({
           where: { id: mensagemId },
-          data: { status: 'CANCELADA' },
+          data: {
+            status: 'CANCELADA',
+            processamentoToken: null,
+            processamentoIniciadoEm: null,
+          },
         });
         return null;
       }
@@ -89,24 +112,45 @@ export class DispatchEmailProcessor extends WorkerHost {
       const contato = mensagem.contatoId
         ? await tx.contato.findUnique({ where: { id: mensagem.contatoId } })
         : null;
+      const conexao = await tx.conexaoEmail.findFirst({
+        where: { status: 'ATIVA' },
+        orderBy: { createdAt: 'asc' },
+      });
 
-      return { mensagem, campanha, template, contato };
+      return { mensagem, campanha, template, contato, conexao };
     });
 
     if (!ctx) return;
-    const { template, contato } = ctx;
+    const { template, contato, conexao } = ctx;
 
     // Validações que levam a FALHA permanente.
     if (!template || !template.mjml) {
-      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Template sem MJML');
+      await this.marcarFalha(tenantId, mensagemId, campanhaId, claimToken, 'Template sem MJML');
       return;
     }
     if (!contato || !contato.email) {
-      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Contato sem email');
+      await this.marcarFalha(tenantId, mensagemId, campanhaId, claimToken, 'Contato sem email');
       return;
     }
     if (!contato.optInEmail) {
-      await this.marcarFalha(tenantId, mensagemId, campanhaId, 'Contato sem opt-in de email');
+      await this.marcarFalha(
+        tenantId,
+        mensagemId,
+        campanhaId,
+        claimToken,
+        'Contato sem opt-in de email',
+      );
+      return;
+    }
+    if (!conexao) {
+      await this.marcarFalha(
+        tenantId,
+        mensagemId,
+        campanhaId,
+        claimToken,
+        'Conexão de email inativa',
+        true,
+      );
       return;
     }
 
@@ -128,11 +172,27 @@ export class DispatchEmailProcessor extends WorkerHost {
       opt_out_url: optOutUrl,
     };
 
+    let html: string;
+    let assunto: string;
     try {
-      const html = comRodapeOptOut(renderizarEmail(template.mjml, variaveis), optOutUrl);
-      const assunto = renderizarAssunto(template.assunto ?? '(sem assunto)', variaveis);
+      html = comRodapeOptOut(await renderizarEmail(template.mjml, variaveis), optOutUrl);
+      assunto = renderizarAssunto(template.assunto ?? '(sem assunto)', variaveis);
+    } catch (err) {
+      await this.marcarFalha(
+        tenantId,
+        mensagemId,
+        campanhaId,
+        claimToken,
+        err instanceof Error
+          ? `Template inválido: ${err.message.slice(0, 160)}`
+          : 'Template inválido',
+      );
+      return;
+    }
 
-      await this.mail.enviar({
+    try {
+      const enviada = await this.mail.enviar({
+        from: conexao.remetente,
         to: contato.email,
         subject: assunto,
         html,
@@ -141,33 +201,45 @@ export class DispatchEmailProcessor extends WorkerHost {
           'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
         },
       });
+      if (!enviada.messageId) {
+        throw new Error('Provedor de email não retornou o ID da mensagem.');
+      }
 
       await this.prisma.runInTenant(tenantId, async (tx) => {
-        await tx.mensagem.update({
-          where: { id: mensagemId },
+        const concluida = await tx.mensagem.updateMany({
+          where: { id: mensagemId, status: 'PROCESSANDO', processamentoToken: claimToken },
           data: {
             status: 'ENVIADA',
             enviadaEm: new Date(),
+            providerMessageId: enviada.messageId,
+            processamentoToken: null,
+            processamentoIniciadoEm: null,
             custoEstimadoBrl: new Prisma.Decimal(CUSTO_REFERENCIA.sesEmailSend),
             statusHistory: { push: { status: 'ENVIADA', at: new Date().toISOString() } },
           },
         });
-        await tx.campanha.update({
-          where: { id: campanhaId },
-          data: { totalEnviados: { increment: 1 } },
-        });
-      });
-
-      await this.usage.log(tenantId, 'ses.email.send', CUSTO_REFERENCIA.sesEmailSend, {
-        mensagemId,
-        campanhaId,
+        if (concluida.count > 0) {
+          await tx.campanha.update({
+            where: { id: campanhaId },
+            data: { totalEnviados: { increment: 1 } },
+          });
+          await tx.usageLog.create({
+            data: {
+              tenantId,
+              servico: 'ses.email.send',
+              custoEstimadoBrl: new Prisma.Decimal(CUSTO_REFERENCIA.sesEmailSend),
+              metadados: { mensagemId, campanhaId, providerMessageId: enviada.messageId },
+            },
+          });
+        }
       });
     } catch (err) {
       this.logger.warn({ msg: 'dispatch_email_falhou', mensagemId, err });
-      await this.marcarFalha(
+      await this.marcarIncerto(
         tenantId,
         mensagemId,
         campanhaId,
+        claimToken,
         err instanceof Error ? err.message.slice(0, 200) : 'Erro de envio',
       );
     }
@@ -177,21 +249,58 @@ export class DispatchEmailProcessor extends WorkerHost {
     tenantId: string,
     mensagemId: string,
     campanhaId: string,
+    claimToken: string,
     motivo: string,
+    retryable = false,
   ): Promise<void> {
     await this.prisma.runInTenant(tenantId, async (tx) => {
-      await tx.mensagem.update({
-        where: { id: mensagemId },
+      const alterada = await tx.mensagem.updateMany({
+        where: { id: mensagemId, status: 'PROCESSANDO', processamentoToken: claimToken },
         data: {
           status: 'FALHOU',
           falhaMotivo: motivo,
-          statusHistory: { push: { status: 'FALHOU', motivo, at: new Date().toISOString() } },
+          processamentoToken: null,
+          processamentoIniciadoEm: null,
+          statusHistory: {
+            push: { status: 'FALHOU', motivo, retryable, at: new Date().toISOString() },
+          },
         },
       });
-      await tx.campanha.update({
-        where: { id: campanhaId },
-        data: { totalFalhas: { increment: 1 } },
+      if (alterada.count > 0) {
+        await tx.campanha.update({
+          where: { id: campanhaId },
+          data: { totalFalhas: { increment: 1 } },
+        });
+      }
+    });
+  }
+
+  private async marcarIncerto(
+    tenantId: string,
+    mensagemId: string,
+    campanhaId: string,
+    claimToken: string,
+    motivo: string,
+  ): Promise<void> {
+    await this.prisma.runInTenant(tenantId, async (tx) => {
+      const alterada = await tx.mensagem.updateMany({
+        where: { id: mensagemId, status: 'PROCESSANDO', processamentoToken: claimToken },
+        data: {
+          status: 'ENVIO_INCERTO',
+          falhaMotivo: motivo,
+          processamentoToken: null,
+          processamentoIniciadoEm: null,
+          statusHistory: {
+            push: { status: 'ENVIO_INCERTO', motivo, at: new Date().toISOString() },
+          },
+        },
       });
+      if (alterada.count > 0) {
+        await tx.campanha.updateMany({
+          where: { id: campanhaId, status: { in: ['AGENDADA', 'DISPARANDO'] } },
+          data: { status: 'PAUSADA' },
+        });
+      }
     });
   }
 

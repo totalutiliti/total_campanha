@@ -40,6 +40,12 @@ export class PublicController {
   }
 
   @Public()
+  @Get('opt-in/confirmar/:token')
+  async confirmarOptIn(@Param('token') token: string) {
+    return this.optIn.confirmar(token);
+  }
+
+  @Public()
   @Get('opt-out/:token')
   async submeterOptOut(@Param('token') token: string, @Req() req: Request) {
     return this.optOut.executar(token, {

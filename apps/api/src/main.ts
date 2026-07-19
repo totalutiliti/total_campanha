@@ -13,7 +13,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { env } from './config/config.module.js';
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
 
   app.useLogger(app.get(Logger));
   app.flushLogs();

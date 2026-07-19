@@ -87,12 +87,13 @@ Obrigatórias na API: `DATABASE_URL` (**app_user**), `DATABASE_MIGRATION_URL`
 `API_PUBLIC_URL`, `COOKIE_SECURE=true`, `COOKIE_SAMESITE=none`, `COOKIE_DOMAIN`
 (host da API), URLs públicas de opt-in/out e webhook.
 
-⚠️ **Worker:** `DATABASE_URL` do worker aponta para **migration_user (BYPASSRLS)**,
-NÃO app_user — os processors cross-tenant (retry, verificar-emails, trial) varrem
-todos os tenants e, como app_user, o RLS retorna 0 linhas **silenciosamente**
-(retry/verificação/expiração de trial param de funcionar sem nenhum erro de log).
-Incidente em 12/06/2026: o deploy original usou app_user e esses 3 processors
-ficaram inertes por 10 dias. Ver `apps/worker/src/processors/verificar-emails.processor.ts`.
+⚠️ **Worker:** `DATABASE_URL` aponta obrigatoriamente para **app_user**, com RLS.
+`DATABASE_MIGRATION_URL` aponta para `migration_user`, mas é usada somente pelo
+`ControlPlanePrismaService` para descobrir IDs/tenants de jobs recorrentes. Cada
+leitura ou mutação de domínio volta a abrir `runInTenant` pela conexão operacional.
+O boot rejeita `migration_user` em `DATABASE_URL`; em produção também exige as
+duas URLs separadas. O incidente de 12/06/2026 permanece registrado como histórico,
+mas não justifica conceder `BYPASSRLS` a todo o worker.
 
 ⚠️ **Web (runtime):** `PORT=3000`, `HOSTNAME=0.0.0.0` (Next standalone bind),
 `NODE_ENV=production` **e `API_BASE_URL`** (URL externa da API, sem `/api/v1`) —

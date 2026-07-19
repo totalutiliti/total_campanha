@@ -214,9 +214,15 @@ model Mensagem {
   entregueEm        DateTime?      @map("entregue_em")
   lidaEm            DateTime?      @map("lida_em")
   falhaMotivo       String?        @map("falha_motivo")
+  // Claim atômico do worker. Somente o processador que possui o token pode
+  // concluir a chamada externa; resultado ambíguo nunca volta para retry.
+  processamentoToken      String?   @map("processamento_token")
+  processamentoIniciadoEm DateTime? @map("processamento_iniciado_em")
+  tentativasEnvio          Int       @default(0) @map("tentativas_envio")
 
   @@index([tenantId, campanhaId])
   @@index([tenantId, status])
+  @@index([tenantId, status, processamentoIniciadoEm])
   @@index([providerMessageId])
   @@map("mensagens")
 }
@@ -224,11 +230,13 @@ model Mensagem {
 enum StatusMensagem {
   PENDENTE
   ENFILEIRADA
+  PROCESSANDO
   ENVIADA
   ENTREGUE
   LIDA
   RESPONDIDA
   FALHOU
+  ENVIO_INCERTO
   CANCELADA
 }
 
@@ -239,6 +247,9 @@ model ConexaoWhatsapp {
   phoneNumberId  String        @map("phone_number_id")
   // Criptografado via pgcrypto.pgp_sym_encrypt (RULES 4.1).
   tokenEncrypted Bytes         @map("token_encrypted")
+  // App Secret do app Meta do tenant. Usado exclusivamente para validar
+  // X-Hub-Signature-256; nunca é retornado pela API.
+  appSecretEncrypted Bytes?    @map("app_secret_encrypted")
   webhookSecret  String        @map("webhook_secret")
   tierMeta       TierMeta      @default(TIER_250) @map("tier_meta")
   qualityRating  String?       @map("quality_rating")
@@ -298,6 +309,41 @@ model OptInLog {
   @@map("opt_in_logs")
 }
 
+model ConsentimentoPendente {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  contatoId    String    @map("contato_id") @db.Uuid
+  canal        Canal
+  tokenHash    String    @map("token_hash")
+  email        String?
+  ip           String
+  userAgent    String    @map("user_agent")
+  origem       String
+  versaoTermo  String    @map("versao_termo")
+  expiraEm     DateTime  @map("expira_em")
+  confirmadoEm DateTime? @map("confirmado_em")
+  invalidadoEm DateTime? @map("invalidado_em")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@unique([tenantId, tokenHash])
+  @@index([tenantId, contatoId, canal])
+  @@index([tenantId, expiraEm])
+  @@map("consentimentos_pendentes")
+}
+
+model WebhookEvento {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @map("tenant_id") @db.Uuid
+  provedor     String
+  eventoHash   String    @map("evento_hash")
+  recebidoEm   DateTime  @default(now()) @map("recebido_em")
+  processadoEm DateTime? @map("processado_em")
+
+  @@unique([tenantId, provedor, eventoHash])
+  @@index([tenantId, processadoEm])
+  @@map("webhook_eventos")
+}
+
 enum OptInAcao {
   OPT_IN
   OPT_OUT
@@ -335,8 +381,10 @@ model InboxMensagem {
   conversaId String   @map("conversa_id") @db.Uuid
   direcao    String
   conteudo   String
+  providerMessageId String? @map("provider_message_id")
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([tenantId, conversaId])
+  @@unique([tenantId, providerMessageId])
   @@map("inbox_mensagens")
 }
