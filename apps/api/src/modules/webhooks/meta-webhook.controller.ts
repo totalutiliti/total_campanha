@@ -8,6 +8,8 @@ import {
   ForbiddenException,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Logger,
   Param,
   Post,
@@ -79,6 +81,7 @@ export class MetaWebhookController {
 
   @Public()
   @Post(':tenantSlug/:secret')
+  @HttpCode(HttpStatus.OK)
   async receber(
     @Param('tenantSlug') slug: string,
     @Param('secret') secret: string,
